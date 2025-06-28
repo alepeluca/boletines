@@ -1,136 +1,109 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <title>Buscador de Boletines</title>
+  <meta charset="UTF-8">
+  <title>Buscador: Boletines Municipales de Quilmes</title>
   <script src="flexsearch.compact.min.js"></script>
   <style>
-    body { font-family: sans-serif; margin: 2rem; max-width: 900px; }
-    input, select { padding: .5rem; font-size: 1rem; }
-    input[type="month"] { width: 140px; }
-    .resultado {
-      background: #fff; border: 1px solid #ddd; padding: 1rem; margin: 1rem 0;
-      border-radius: 6px;
-    }
-    .fragmento { white-space: pre-wrap; margin-top: .5rem; }
-    .iso { font-size: .95rem; color: #555; margin-top: .3rem; }
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 900px; margin: auto; }
+    input { width: 100%; padding: 10px; margin-bottom: 20px; font-size: 16px; }
+    .result { border-bottom: 1px solid #ccc; padding: 10px 0; }
+    .archivo a { font-weight: bold; text-decoration: none; color: #003366; }
   </style>
 </head>
 <body>
-  <h1>Buscador de Boletines Municipales</h1>
-
-  <div style="display:flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
-    <input id="busqueda" placeholder="Escribí una palabra y presioná Enter..." style="flex: 1;" />
-    <select id="orden">
-      <option value="desc">Más nuevos primero</option>
-      <option value="asc">Más antiguos primero</option>
-    </select>
-  </div>
-
-  <div style="display: flex; gap: 1rem; align-items: center;">
-    <label>Desde: <input type="month" id="desde" /></label>
-    <label>Hasta: <input type="month" id="hasta" /></label>
-  </div>
-
-  <div id="contador" style="margin-top: 1rem; font-weight: bold;"></div>
-  <div id="resultados"></div>
+  <h1>Buscador: Boletines Municipales de Quilmes</h1>
+  <input type="text" id="searchInput" placeholder="Buscar palabra o frase...">
+  <div id="results"></div>
 
   <script>
-    const CHUNKS = Array.from({ length: 16 }, (_, i) => `json_chunks/boletines_part_${i + 1}.jsonl`);
-    const resultadosDiv = document.getElementById('resultados');
-    const input = document.getElementById('busqueda');
-    const contador = document.getElementById('contador');
+    const search = new FlexSearch.Document({
+      document: { id: "id", index: ["fragmento"], store: ["archivo", "fragmento"] },
+    });
 
-    input.addEventListener('keydown', async e => {
-      if (e.key !== 'Enter') return;
-      const q = input.value.trim().toLowerCase();
-      if (!q) return;
-      resultadosDiv.innerHTML = '<p>Cargando resultados…</p>';
-      contador.textContent = '';
+    let documentos = [];
+    let resultados = [];
 
-      let matches = [];
+    function obtenerFechaBonita(fechaStr) {
+      const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+      const año = fechaStr.slice(0, 4);
+      const mes = parseInt(fechaStr.slice(4, 6)) - 1;
+      return `${meses[mes]} de ${año}`;
+    }
 
-      for (let url of CHUNKS) {
-        try {
-          const resp = await fetch(url);
-          const text = await resp.text();
-          const lines = text.split(/\r?\n/);
-          for (let ln of lines) {
-            if (!ln) continue;
-            let obj;
-            try { obj = JSON.parse(ln); } catch { continue; }
-            if (obj.fragmento.toLowerCase().includes(q)) {
-              matches.push(obj);
+    function obtenerBoletinInfo(nombreArchivo) {
+      const match = nombreArchivo.match(/(\d{8}) - boletin-(\d+)\.pdf/);
+      if (match) {
+        const fecha = match[1];
+        const numero = match[2];
+        return {
+          numero: numero,
+          fechaLegible: obtenerFechaBonita(fecha),
+          nombre: `Boletín N.º ${numero} – ${obtenerFechaBonita(fecha)}`,
+          link: `pdfs/${match[0]}`
+        };
+      } else {
+        return {
+          nombre: nombreArchivo,
+          link: `pdfs/${nombreArchivo}`
+        };
+      }
+    }
+
+    async function cargarChunks() {
+      for (let i = 1; i <= 16; i++) {
+        const res = await fetch(`json_chunks/boletines_part_${i}.jsonl`);
+        const text = await res.text();
+        const lineas = text.split("\n").filter(Boolean);
+        for (const linea of lineas) {
+          const doc = JSON.parse(linea);
+          documentos.push(doc);
+          search.add(doc);
+        }
+      }
+    }
+
+    async function iniciarBuscador() {
+      await cargarChunks();
+
+      document.getElementById("searchInput").addEventListener("input", (e) => {
+        const query = e.target.value.trim();
+        resultados = [];
+        document.getElementById("results").innerHTML = "";
+
+        if (query.length < 2) return;
+
+        const encontrados = search.search(query, { enrich: true });
+
+        const ids = new Set();
+        for (const grupo of encontrados) {
+          for (const r of grupo.result) {
+            if (!ids.has(r.id)) {
+              ids.add(r.id);
+              resultados.push(documentos.find(d => d.id === r.id));
             }
           }
-        } catch (err) {
-          console.error('Error cargando', url, err);
-        }
-      }
-
-      // Filtrar por fecha
-      const desde = document.getElementById("desde").value;
-      const hasta = document.getElementById("hasta").value;
-      const normalizar = fechaStr => fechaStr.replace(/-/g, '') + "01";
-
-      matches = matches.filter(m => {
-        const fecha = m.archivo.substring(0, 8);
-        if (desde && fecha < normalizar(desde)) return false;
-        if (hasta && fecha > normalizar(hasta)) return false;
-        return true;
-      });
-
-      // Ordenar
-      const orden = document.getElementById("orden").value;
-      matches.sort((a, b) => {
-        const fechaA = a.archivo.substring(0, 8);
-        const fechaB = b.archivo.substring(0, 8);
-        return orden === "asc" ? fechaA.localeCompare(fechaB) : fechaB.localeCompare(fechaA);
-      });
-
-      // Mostrar resultados
-      if (matches.length === 0) {
-        resultadosDiv.innerHTML = '<p>No se encontraron resultados.</p>';
-        contador.textContent = '0 resultados encontrados.';
-        return;
-      }
-
-      contador.textContent = `${matches.length} resultado${matches.length !== 1 ? 's' : ''} encontrado${matches.length !== 1 ? 's' : ''}.`;
-      resultadosDiv.innerHTML = '';
-
-      const meses = {
-        "01": "enero", "02": "febrero", "03": "marzo", "04": "abril",
-        "05": "mayo", "06": "junio", "07": "julio", "08": "agosto",
-        "09": "septiembre", "10": "octubre", "11": "noviembre", "12": "diciembre"
-      };
-
-      for (let m of matches) {
-        const anio = m.archivo.substring(0, 4);
-        const mesNum = m.archivo.substring(4, 6);
-        const mesNombre = meses[mesNum] || mesNum;
-        const nombrePDF = m.archivo.replace(".txt", ".pdf");
-
-        // Extraer número de boletín
-        let nroBoletin = "";
-        const matchBoletin = m.archivo.match(/boletin-(\d+)/i);
-        if (matchBoletin) {
-          nroBoletin = `Boletín N.º ${matchBoletin[1]} – `;
         }
 
-        // Resaltar palabra clave
-        const regex = new RegExp(q.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi');
-        const frag = m.fragmento.replace(regex, '<mark>$&</mark>');
+        renderResultados();
+      });
+    }
 
-        const div = document.createElement('div');
-        div.className = 'resultado';
-        div.innerHTML = `
-          <a href="pdfs/${encodeURIComponent(nombrePDF)}" target="_blank">${nombrePDF}</a>
-          <div class="iso">${nroBoletin}${mesNombre} de ${anio}</div>
-          <div class="fragmento">${frag}</div>
-        `;
-        resultadosDiv.appendChild(div);
+    function renderResultados() {
+      const container = document.getElementById("results");
+      container.innerHTML = `<p><strong>${resultados.length}</strong> resultados encontrados.</p>`;
+      for (const r of resultados) {
+        const pdfName = r.archivo.replace(".txt", ".pdf");
+        const info = obtenerBoletinInfo(pdfName);
+        container.innerHTML += `
+          <div class="result">
+            <div class="archivo"><a href="${info.link}" target="_blank">${info.nombre}</a></div>
+            <p>${r.fragmento}</p>
+          </div>`;
       }
-    });
+    }
+
+    iniciarBuscador();
   </script>
 </body>
 </html>
