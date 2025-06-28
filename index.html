@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Buscador de Boletines</title>
+  <script src="flexsearch.compact.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; max-width: 900px; }
+    input, select { padding: .5rem; font-size: 1rem; }
+    input[type="month"] { width: 140px; }
+    .resultado {
+      background: #fff; border: 1px solid #ddd; padding: 1rem; margin: 1rem 0;
+      border-radius: 6px;
+    }
+    .fragmento { white-space: pre-wrap; margin-top: .5rem; }
+    .iso { font-size: .95rem; color: #555; margin-top: .3rem; }
+  </style>
+</head>
+<body>
+  <h1>Buscador de Boletines Municipales</h1>
+
+  <div style="display:flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
+    <input id="busqueda" placeholder="Escribí una palabra y presioná Enter..." style="flex: 1;" />
+    <select id="orden">
+      <option value="desc">Más nuevos primero</option>
+      <option value="asc">Más antiguos primero</option>
+    </select>
+  </div>
+
+  <div style="display: flex; gap: 1rem; align-items: center;">
+    <label>Desde: <input type="month" id="desde" /></label>
+    <label>Hasta: <input type="month" id="hasta" /></label>
+  </div>
+
+  <div id="contador" style="margin-top: 1rem; font-weight: bold;"></div>
+  <div id="resultados"></div>
+
+  <script>
+    const CHUNKS = Array.from({ length: 16 }, (_, i) => `json_chunks/boletines_part_${i + 1}.jsonl`);
+    const resultadosDiv = document.getElementById('resultados');
+    const input = document.getElementById('busqueda');
+    const contador = document.getElementById('contador');
+
+    input.addEventListener('keydown', async e => {
+      if (e.key !== 'Enter') return;
+      const q = input.value.trim().toLowerCase();
+      if (!q) return;
+      resultadosDiv.innerHTML = '<p>Cargando resultados…</p>';
+      contador.textContent = '';
+
+      let matches = [];
+
+      for (let url of CHUNKS) {
+        try {
+          const resp = await fetch(url);
+          const text = await resp.text();
+          const lines = text.split(/\r?\n/);
+          for (let ln of lines) {
+            if (!ln) continue;
+            let obj;
+            try { obj = JSON.parse(ln); } catch { continue; }
+            if (obj.fragmento.toLowerCase().includes(q)) {
+              matches.push(obj);
+            }
+          }
+        } catch (err) {
+          console.error('Error cargando', url, err);
+        }
+      }
+
+      // Filtrar por fecha
+      const desde = document.getElementById("desde").value;
+      const hasta = document.getElementById("hasta").value;
+      const normalizar = fechaStr => fechaStr.replace(/-/g, '') + "01";
+
+      matches = matches.filter(m => {
+        const fecha = m.archivo.substring(0, 8);
+        if (desde && fecha < normalizar(desde)) return false;
+        if (hasta && fecha > normalizar(hasta)) return false;
+        return true;
+      });
+
+      // Ordenar
+      const orden = document.getElementById("orden").value;
+      matches.sort((a, b) => {
+        const fechaA = a.archivo.substring(0, 8);
+        const fechaB = b.archivo.substring(0, 8);
+        return orden === "asc" ? fechaA.localeCompare(fechaB) : fechaB.localeCompare(fechaA);
+      });
+
+      // Mostrar resultados
+      if (matches.length === 0) {
+        resultadosDiv.innerHTML = '<p>No se encontraron resultados.</p>';
+        contador.textContent = '0 resultados encontrados.';
+        return;
+      }
+
+      contador.textContent = `${matches.length} resultado${matches.length !== 1 ? 's' : ''} encontrado${matches.length !== 1 ? 's' : ''}.`;
+      resultadosDiv.innerHTML = '';
+
+      const meses = {
+        "01": "enero", "02": "febrero", "03": "marzo", "04": "abril",
+        "05": "mayo", "06": "junio", "07": "julio", "08": "agosto",
+        "09": "septiembre", "10": "octubre", "11": "noviembre", "12": "diciembre"
+      };
+
+      for (let m of matches) {
+        const anio = m.archivo.substring(0, 4);
+        const mesNum = m.archivo.substring(4, 6);
+        const mesNombre = meses[mesNum] || mesNum;
+        const nombrePDF = m.archivo.replace(".txt", ".pdf");
+
+        // Extraer número de boletín
+        let nroBoletin = "";
+        const matchBoletin = m.archivo.match(/boletin-(\d+)/i);
+        if (matchBoletin) {
+          nroBoletin = `Boletín N.º ${matchBoletin[1]} – `;
+        }
+
+        // Resaltar palabra clave
+        const regex = new RegExp(q.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi');
+        const frag = m.fragmento.replace(regex, '<mark>$&</mark>');
+
+        const div = document.createElement('div');
+        div.className = 'resultado';
+        div.innerHTML = `
+          <a href="pdfs/${encodeURIComponent(nombrePDF)}" target="_blank">${nombrePDF}</a>
+          <div class="iso">${nroBoletin}${mesNombre} de ${anio}</div>
+          <div class="fragmento">${frag}</div>
+        `;
+        resultadosDiv.appendChild(div);
+      }
+    });
+  </script>
+</body>
+</html>
