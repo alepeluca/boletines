@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Buscador de Boletines</title>
-  <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet" />
   <style>
     body {
       font-family: 'Mohave', sans-serif;
@@ -101,9 +101,9 @@
 <body>
   <div id="searchContainer">
     <div id="searchOptions">
-      <label><input type="radio" name="searchType" value="contains" checked> Contiene</label>
-      <label><input type="radio" name="searchType" value="endsWith"> Termina en</label>
-      <label><input type="radio" name="searchType" value="or"> Contiene alguna palabra</label>
+      <label><input type="radio" name="searchType" value="contains" checked /> Contiene</label>
+      <label><input type="radio" name="searchType" value="endsWith" /> Termina en</label>
+      <label><input type="radio" name="searchType" value="or" /> Contiene alguna palabra</label>
     </div>
     <input id="busqueda" placeholder="Escribí una palabra…" style="width: 100%; max-width: 600px;" />
   </div>
@@ -127,7 +127,7 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V0.1.28</div>
+  <div id="version">V0.1.29</div>
 
   <script>
     const progressBar = document.getElementById('progressBar');
@@ -150,40 +150,19 @@
           break;
         }
       }
+      console.log(`Total chunks detectados: ${count}`);
       return count;
     }
 
-    async function cargarPDF(urlOriginal) {
-      pdfPreview.innerHTML = '<p>Cargando vista previa…</p>';
-
-      const tryDirectPDF = async () => {
-        return new Promise((resolve) => {
-          const iframe = document.createElement('iframe');
-          iframe.src = urlOriginal;
-          iframe.title = "Vista previa del PDF";
-          iframe.onload = () => resolve({ success: true, iframe });
-          iframe.onerror = () => resolve({ success: false });
-          iframe.style.width = '100%';
-          iframe.style.height = '600px';
-          iframe.style.border = 'none';
-          resolve({ iframe });
-          setTimeout(() => resolve({ success: false }), 4000);
-          pdfPreview.innerHTML = '';
-          pdfPreview.appendChild(iframe);
-        });
-      };
-
-      const tryGoogleViewer = (url) => {
-        const gviewUrl = `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
+    async function cargarPDF(url) {
+      pdfPreview.innerHTML = '<p>Cargando vista previa...</p>';
+      try {
         pdfPreview.innerHTML = `
-          <h3>Vista previa (modo compatibilidad)</h3>
-          <iframe src="${gviewUrl}" title="Vista previa alternativa del PDF"></iframe>
+          <h3>Vista previa del boletín</h3>
+          <iframe src="${url}" title="Vista previa del PDF" allowfullscreen></iframe>
         `;
-      };
-
-      const result = await tryDirectPDF();
-      if (!result.success) {
-        tryGoogleViewer(urlOriginal);
+      } catch {
+        pdfPreview.innerHTML = `<p class="error">No se pudo cargar el PDF: ${url}</p>`;
       }
     }
 
@@ -231,7 +210,9 @@
             try { obj = JSON.parse(ln); } catch { continue; }
             if (regex.test(obj.fragmento)) matches.push(obj);
           }
-        } catch (e) {}
+        } catch {
+          // ignorar error de carga de chunk
+        }
         progressBar.value = i;
       }
 
@@ -259,7 +240,6 @@
         contador.textContent = '0 resultados encontrados.';
         return;
       }
-
       contador.textContent = `${matches.length} resultado${matches.length > 1 ? 's' : ''} encontrado${matches.length > 1 ? 's' : ''}.`;
 
       const meses = {
@@ -268,13 +248,15 @@
         "09":"septiembre","10":"octubre","11":"noviembre","12":"diciembre"
       };
 
-      const masReciente = matches[0];
-      const fechaReciente = masReciente.archivo.substring(0,8);
-      const numReciente = masReciente.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/A';
-      const paginaReciente = masReciente.pagina && !isNaN(masReciente.pagina) ? masReciente.pagina : 1;
-      const urlPDFMasReciente = `https://quilmes.gov.ar/pdf/boletines/boletin-${numReciente}.pdf#page=${paginaReciente}`;
-      cargarPDF(urlPDFMasReciente);
+      if (matches.length > 0) {
+        const masReciente = matches[0];
+        const numReciente = masReciente.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/A';
+        const paginaReciente = masReciente.pagina && !isNaN(masReciente.pagina) ? masReciente.pagina : 1;
+        const urlPDFMasReciente = `pdfjs/web/viewer.html?file=${encodeURIComponent(`https://quilmes.gov.ar/pdf/boletines/boletin-${numReciente}.pdf`)}#page=${paginaReciente}`;
+        cargarPDF(urlPDFMasReciente);
+      }
 
+      resultadosDiv.innerHTML = '';
       for (let m of matches) {
         const fecha = m.archivo.substring(0,8);
         const anio = fecha.slice(0,4);
@@ -283,18 +265,16 @@
         const num = numMatch ? numMatch[1] : 'N/A';
         const pagina = m.pagina && !isNaN(m.pagina) ? m.pagina : 1;
         const texto = `Boletín Oficial Municipal N.º ${num} – ${mesNombre} de ${anio}`;
-        const urlPDF = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${pagina}`;
+        const urlPDF = `pdfjs/web/viewer.html?file=${encodeURIComponent(`https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf`)}#page=${pagina}`;
 
         const div = document.createElement('div');
         div.className = 'resultado';
         div.innerHTML = `
           <div class="linea">
-            <a href="${urlPDF}" target="_blank">${texto}</a> (Página ${pagina})
+            <a href="${urlPDF}" target="_blank" rel="noopener noreferrer">${texto}</a> (Página ${pagina})
             <span>← pulse para descargar el boletín pdf o pulse aquí para previsualizarlo más abajo</span>
           </div>
-          <div class="fragmento">
-            ${m.fragmento.replace(regex, '<mark>$&</mark>')}
-          </div>
+          <div class="fragmento">${m.fragmento.replace(regex, '<mark>$&</mark>')}</div>
         `;
         div.addEventListener('click', () => cargarPDF(urlPDF));
         resultadosDiv.appendChild(div);
@@ -302,9 +282,14 @@
     }
 
     input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') realizarBusqueda();
+      if (e.key === 'Enter') {
+        realizarBusqueda();
+      }
     });
-    botonBuscar.addEventListener('click', () => realizarBusqueda());
+
+    botonBuscar.addEventListener('click', () => {
+      realizarBusqueda();
+    });
   </script>
 </body>
 </html>
