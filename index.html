@@ -2,11 +2,12 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Buscador: Boletines Municipales de Quilmes</title>
+  <title>Buscador de Boletines</title>
+  <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet">
   <script src="flexsearch.compact.min.js"></script>
   <style>
     body {
-      font-family: sans-serif;
+      font-family: 'Mohave', sans-serif;
       margin: 2rem auto;
       max-width: 900px;
       background: #f0f0f0;
@@ -73,8 +74,6 @@
   </style>
 </head>
 <body>
-  <h1>Buscador: Boletines Municipales de Quilmes</h1>
-
   <div id="searchContainer">
     <div id="searchOptions">
       <label><input type="radio" name="searchType" value="contains" checked> Contiene</label>
@@ -101,11 +100,9 @@
 
   <progress id="progressBar" max="1" value="0"></progress>
   <div id="status"></div>
-  <div id="contador"></div>
+  <div id="contador" style="font-weight:bold;"></div>
   <div id="resultados" style="width: 100%; max-width: 900px;"></div>
-  <div id="pdf
-
-Preview"></div>
+  <div id="pdfPreview" style="width: 100%; max-width: 900px; margin-top: 2rem;"></div>
 
   <script>
     const progressBar = document.getElementById('progressBar');
@@ -146,7 +143,7 @@ Preview"></div>
       const totalChunks = await detectChunks();
       progressBar.max = totalChunks || 1;
 
-      let matches =0];
+      let matches = [];
       let regex;
       const searchType = document.querySelector('input[name="searchType"]:checked').value;
       try {
