@@ -1,35 +1,40 @@
-name: Actualizar boletines JSON
+name: Actualizar boletines
 
 on:
   schedule:
-    - cron: '0 9 * * *'  # Todos los días a las 9:00 UTC (6:00 AM ARG)
-  workflow_dispatch:     # Permite ejecutarlo manualmente desde GitHub
+    - cron: '0 8 * * *'  # Todos los días a las 8 AM UTC
+  workflow_dispatch:     # Permite ejecutarlo manualmente
 
 jobs:
-  update:
+  actualizar:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clonar repositorio
+      - name: Clonar el repositorio
         uses: actions/checkout@v3
 
       - name: Configurar Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
+          python-version: '3.10'
 
       - name: Instalar dependencias
-        run: pip install PyPDF2 requests
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests PyMuPDF
 
-      - name: Ejecutar script
+      - name: Ejecutar el script de actualización
         run: python scripts/update_boletines.py
 
-      - name: Subir cambios si los hay
+      - name: Confirmar cambios si los hay
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add json_chunks/boletines_part_*.jsonl
-          git diff --cached --quiet || git commit -m "update: nuevo boletín agregado automáticamente"
-          git push
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add json_chunks/*.jsonl
+          git add public/ultima_actualizacion.json || true
+          if git diff --cached --quiet; then
+            echo "No hay nuevos boletines para subir."
+          else
+            git commit -m "Actualización automática de boletines"
+            git push
+          fi
