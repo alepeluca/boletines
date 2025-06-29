@@ -27,10 +27,21 @@
       padding: 1rem;
       margin: 1rem 0;
       border-radius: 6px;
+      cursor: pointer;
     }
+    .resultado:hover { background: #e6f0ff; }
     .linea { font-weight: bold; margin-bottom: .5rem; }
     .fragmento { white-space: pre-wrap; }
     #status { font-style: italic; margin-bottom: .5rem; }
+    #visor {
+      margin-top: 2rem;
+      height: 600px;
+      border: 2px solid #ccc;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #fff;
+    }
+    #visor iframe { width: 100%; height: 100%; border: none; }
   </style>
 </head>
 <body>
@@ -60,11 +71,11 @@
     <label>Hasta: <input type="month" id="hasta" /></label>
   </div>
 
-  <!-- Barra siempre visible -->
   <progress id="progressBar" max="1" value="0"></progress>
   <div id="status"></div>
   <div id="contador" style="font-weight:bold;"></div>
   <div id="resultados"></div>
+  <div id="visor"></div>
 
   <script>
     const progressBar = document.getElementById('progressBar');
@@ -73,6 +84,7 @@
     const input       = document.getElementById('busqueda');
     const contador    = document.getElementById('contador');
     const botonBuscar = document.getElementById('botonBuscar');
+    const visor       = document.getElementById('visor');
 
     async function detectChunks() {
       let count = 0;
@@ -93,12 +105,12 @@
       const q = input.value.trim();
       if (!q) return;
 
-      // inicio
       botonBuscar.disabled = true;
       statusDiv.textContent = 'Buscando…';
       resultadosDiv.innerHTML = '';
       contador.textContent = '';
       progressBar.value = 0;
+      visor.innerHTML = '';
 
       const totalChunks = await detectChunks();
       progressBar.max = totalChunks || 1;
@@ -114,7 +126,6 @@
         return;
       }
 
-      // recorrer chunks
       for (let i = 1; i <= totalChunks; i++) {
         try {
           const text = await (await fetch(`json_chunks/boletines_part_${i}.jsonl`)).text();
@@ -130,13 +141,12 @@
         progressBar.value = i;
       }
 
-      // fin búsqueda
       statusDiv.textContent = '';
       botonBuscar.disabled = false;
 
-      // filtro fechas
-      const desde = document.getElementById("desde").value;
-      const hasta = document.getElementById("hasta").value;
+      // Filtro fechas
+      const desde = document.getElementById('desde').value;
+      const hasta = document.getElementById('hasta').value;
       const norm = v => v.replace(/-/g,'') + '01';
       matches = matches.filter(m => {
         const f = m.archivo.substring(0,8);
@@ -145,20 +155,20 @@
         return true;
       });
 
-      // ordenar
-      const orden = document.getElementById("orden").value;
+      // Ordenar
+      const orden = document.getElementById('orden').value;
       matches.sort((a,b) => {
         const fa = a.archivo.substring(0,8), fb = b.archivo.substring(0,8);
-        return orden==='asc' ? fa.localeCompare(fb) : fb.localeCompare(fa);
+        return orden === 'asc' ? fa.localeCompare(fb) : fb.localeCompare(fa);
       });
 
-      // mostrar resultados
       if (!matches.length) {
         resultadosDiv.innerHTML = '<p>No se encontraron resultados.</p>';
         contador.textContent = '0 resultados encontrados.';
         return;
       }
-      contador.textContent = `${matches.length} resultado${matches.length>1?'s':''} encontrado${matches.length>1?'s':''}.`;
+
+      contador.textContent = `${matches.length} resultado${matches.length > 1 ? 's' : ''} encontrado${matches.length > 1 ? 's' : ''}.`;
 
       const meses = {
         "01":"enero","02":"febrero","03":"marzo","04":"abril",
@@ -172,23 +182,29 @@
         const mesNombre = meses[fecha.slice(4,6)] || fecha.slice(4,6);
         const num = (m.archivo.match(/boletin-(\d+)/i)||[])[1]||'';
         const texto = `Boletín Oficial Municipal N.º ${num} – ${mesNombre} de ${anio}`;
+        // suponer que m.pagina existe; sino usar 1
+        const page = m.pagina || 1;
         const urlPDF = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf`;
 
         const div = document.createElement('div');
         div.className = 'resultado';
         div.innerHTML = `
-          <div class="linea">
-            <a href="${urlPDF}" target="_blank">${texto}</a>
-          </div>
-          <div class="fragmento">
-            ${m.fragmento.replace(regex, '<mark>$&</mark>')}
+          <div class="linea"><a href="#">${texto}</a></div>
+          <div class="fragmento">\${m.fragmento.replace(regex, '<mark>$&</mark>')}
           </div>
         `;
+        // click para cargar visor
+        div.addEventListener('click', () => {
+          visor.innerHTML = `<iframe src="${urlPDF}#page=${page}" allowfullscreen></iframe>`;
+          // scroll al visor
+          visor.scrollIntoView({ behavior: 'smooth' });
+        });
+
         resultadosDiv.appendChild(div);
       }
     }
 
-    input.addEventListener('keydown', e => e.key==='Enter' && realizarBusqueda());
+    input.addEventListener('keydown', e => e.key === 'Enter' && realizarBusqueda());
     botonBuscar.addEventListener('click', realizarBusqueda);
   </script>
 </body>
