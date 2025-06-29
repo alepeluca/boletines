@@ -258,8 +258,10 @@
       const masReciente = matches[0];
       const numReciente = masReciente.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/A';
       const paginaReciente = masReciente.pagina && !isNaN(masReciente.pagina) ? masReciente.pagina : 1;
-      const urlPDFMasReciente = `https://quilmes.gov.ar/institucional/gobierno_abierto/boletin-${numReciente}.pdf#page=${paginaReciente}`;
+      const urlPDFMasReciente = `https://quilmes.gov.ar/pdf/boletines/boletin-${numReciente}.pdf#page=${paginaReciente}`;
       cargarPDF(urlPDFMasReciente);
+
+      
 
       for (let m of matches) {
         const fecha = m.archivo.substring(0,8);
@@ -269,7 +271,7 @@
         const num = numMatch ? numMatch[1] : 'N/A';
         const pagina = m.pagina && !isNaN(m.pagina) ? m.pagina : 1;
         const texto = `Boletín Oficial Municipal N.º ${num} – ${mesNombre} de ${anio}`;
-        const urlPDF = `https://quilmes.gov.ar/institucional/gobierno_abierto/boletin-${num}.pdf#page=${pagina}`;
+        const urlPDF = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${pagina}`;
 
         const div = document.createElement('div');
         div.className = 'resultado';
