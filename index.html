@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Buscador de Boletines</title>
-  <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet" />
   <style>
     body {
       font-family: 'Mohave', sans-serif;
@@ -33,7 +33,7 @@
       border-radius: 6px;
       cursor: pointer;
       max-width: 900px;
-      width: 100%;
+      width: 90%;
     }
     .linea {
       font-weight: bold;
@@ -80,6 +80,8 @@
       background: #fff;
       border-radius: 8px;
       text-align: center;
+      min-height: 600px;
+      width: 100%;
     }
     #pdfPreview iframe {
       width: 100%;
@@ -101,9 +103,9 @@
 <body>
   <div id="searchContainer">
     <div id="searchOptions">
-      <label><input type="radio" name="searchType" value="contains" checked> Contiene</label>
-      <label><input type="radio" name="searchType" value="endsWith"> Termina en</label>
-      <label><input type="radio" name="searchType" value="or"> Contiene alguna palabra</label>
+      <label><input type="radio" name="searchType" value="contains" checked /> Contiene</label>
+      <label><input type="radio" name="searchType" value="endsWith" /> Termina en</label>
+      <label><input type="radio" name="searchType" value="or" /> Contiene alguna palabra</label>
     </div>
     <input id="busqueda" placeholder="Escribí una palabra…" style="width: 100%; max-width: 600px;" />
   </div>
@@ -128,7 +130,7 @@
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
   <div id="ultimaActualizacion"></div>
-  <div id="version">V0.1.32</div>
+  <div id="version">V0.1.33</div>
 
   <script>
     const progressBar = document.getElementById('progressBar');
@@ -169,7 +171,11 @@
       if (disponible) {
         pdfPreview.innerHTML = `
           <h3>Vista previa del boletín</h3>
-          <iframe src="https://drive.google.com/viewerng/viewer?embedded=true&url=${encodeURIComponent(url)}"></iframe>
+          <iframe 
+            src="https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(url)}" 
+            allowfullscreen 
+            style="width:100%; height:600px; border:none;"
+          ></iframe>
         `;
       } else {
         pdfPreview.innerHTML = `<p class="error">No se pudo cargar el PDF: ${url}</p>`;
@@ -279,7 +285,7 @@
         div.className = 'resultado';
         div.innerHTML = `
           <div class="linea">
-            <a href="${urlPDF}" target="_blank">${texto}</a> (Página ${pagina})
+            <a href="${urlPDF}" target="_blank" rel="noopener noreferrer">${texto}</a> (Página ${pagina})
             <span>← pulse para descargar el boletín PDF o pulse aquí para previsualizarlo más abajo</span>
           </div>
           <div class="fragmento">
