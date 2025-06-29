@@ -15,99 +15,41 @@
       align-items: center;
     }
     input, select, input[type="month"], button {
-      padding: .5rem;
-      font-size: 1rem;
+      padding: .5rem; font-size: 1rem;
     }
     input[type="month"] { width: 140px; }
     #progressBar {
-      width: 100%;
-      max-width: 900px;
-      height: 1.2rem;
-      margin: 1rem 0;
+      width: 100%; max-width: 900px; height: 1.2rem; margin: 1rem 0;
     }
     .resultado {
-      background: #fff;
-      border: 2px solid blue;
-      padding: 1rem;
-      margin: 1rem 0;
-      border-radius: 6px;
-      cursor: pointer;
-      max-width: 900px;
-      width: 90%;
+      background: #fff; border: 2px solid blue; padding: 1rem;
+      margin: 1rem 0; border-radius: 6px; cursor: pointer;
+      max-width: 900px; width: 90%;
     }
     .linea {
-      font-weight: bold;
-      margin-bottom: .5rem;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
+      font-weight: bold; margin-bottom: .5rem;
+      display: flex; align-items: center; gap: 1rem;
     }
-    .linea a { text-decoration: none; }
-    .linea span { font-size: 0.9rem; font-weight: normal; color: #555; }
     .fragmento { white-space: pre-wrap; }
-    #status { font-style: italic; margin-bottom: .5rem; text-align: center; }
+    #status { font-style: italic; text-align: center; }
     #contador { font-weight: bold; text-align: center; }
-    #searchContainer, #dateContainer, #resultados, #pdfPreview {
-      width: 100%;
-      max-width: 900px;
-      margin-bottom: 1rem;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    #searchOptions {
-      display: flex;
-      gap: 1rem;
-      margin-bottom: 1rem;
-      justify-content: center;
-    }
-    #searchOptions label {
-      display: flex;
-      align-items: center;
-      gap: .5rem;
-    }
-    #resultados {
-      max-height: 300px;
-      overflow-y: auto;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      padding: 1rem;
-      background: #fff;
-    }
+    #resultados { width:100%; max-width:900px; background:#fff; border:1px solid #ccc;
+      border-radius:8px; padding:1rem; max-height:300px; overflow-y:auto; }
     #pdfPreview {
-      border: 1px solid #ccc;
-      padding: 1rem;
-      background: #fff;
-      border-radius: 8px;
-      text-align: center;
-      min-height: 600px;
-      width: 100%;
+      width:100%; max-width:900px; min-height:600px;
+      background:#fff; border:1px solid #ccc; border-radius:8px;
+      padding:1rem; text-align:center;
     }
-    #pdfPreview iframe {
-      width: 100%;
-      height: 600px;
-      border: none;
-    }
-    #pdfPreview .error {
-      color: red;
-      font-weight: bold;
-    }
+    #pdfPreview iframe { width:100%; height:600px; border:none; }
     #version, #ultimaActualizacion {
-      text-align: center;
-      font-size: 0.9rem;
-      color: #666;
-      margin-top: 1rem;
-      margin-bottom: 1rem;
+      text-align:center; font-size:0.9rem; color:#666; margin:1rem 0;
     }
-    #ultimaActualizacion {
-      font-weight: bold;
-      font-size: 1.1rem;
-    }
+    #ultimaActualizacion { font-weight:bold; font-size:1.1rem; }
   </style>
 </head>
 <body>
 
-  <div id="ultimaActualizacion">Cargando última actualización...</div>
+  <div id="ultimaActualizacion">Cargando última actualización…</div>
 
   <div id="searchContainer">
     <div id="searchOptions">
@@ -115,15 +57,15 @@
       <label><input type="radio" name="searchType" value="endsWith" /> Termina en</label>
       <label><input type="radio" name="searchType" value="or" /> Contiene alguna palabra</label>
     </div>
-    <input id="busqueda" placeholder="Escribí una palabra…" style="width: 100%; max-width: 600px;" />
+    <input id="busqueda" placeholder="Escribí una palabra…" style="width:100%;max-width:600px" />
   </div>
 
   <div id="dateContainer">
-    <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
+    <div style="display:flex;gap:1rem;align-items:center;margin-bottom:1rem">
       <label>Desde: <input type="month" id="desde" /></label>
       <label>Hasta: <input type="month" id="hasta" /></label>
     </div>
-    <div style="display: flex; gap: 1rem; align-items: center;">
+    <div style="display:flex;gap:1rem;align-items:center">
       <select id="orden">
         <option value="desc">Más nuevos primero</option>
         <option value="asc">Más antiguos primero</option>
@@ -137,10 +79,10 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-
-  <div id="version">V0.1.34</div>
+  <div id="version">V0.1.35</div>
 
   <script>
+    const ultimaDiv = document.getElementById('ultimaActualizacion');
     const progressBar = document.getElementById('progressBar');
     const statusDiv = document.getElementById('status');
     const resultadosDiv = document.getElementById('resultados');
@@ -148,208 +90,149 @@
     const contador = document.getElementById('contador');
     const botonBuscar = document.getElementById('botonBuscar');
     const pdfPreview = document.getElementById('pdfPreview');
-    const ultimaActualizacionDiv = document.getElementById('ultimaActualizacion');
 
+    // Detectar cuántos chunks hay
     async function detectChunks() {
       let count = 0;
       while (true) {
-        const url = `json_chunks/boletines_part_${count + 1}.jsonl`;
         try {
-          const res = await fetch(url, { method: 'HEAD' });
+          const res = await fetch(`json_chunks/boletines_part_${count+1}.jsonl`, {method:'HEAD'});
           if (!res.ok) break;
           count++;
-        } catch {
-          break;
-        }
+        } catch { break; }
       }
       return count;
     }
 
-    async function verificarPDF(url) {
-      try {
-        const res = await fetch(url, { method: 'HEAD' });
-        return res.ok;
-      } catch {
-        return false;
+    // Mostrar última actualización
+    async function mostrarUltimaActualizacion() {
+      const total = await detectChunks();
+      if (total === 0) {
+        ultimaDiv.textContent = 'Sin datos de boletines.';
+        return;
       }
+      // Leer el último chunk
+      const text = await (await fetch(`json_chunks/boletines_part_${total}.jsonl`)).text();
+      const lines = text.trim().split('\n').filter(Boolean);
+      // Tomar la última línea válida
+      for (let i = lines.length-1; i>=0; i--) {
+        try {
+          const obj = JSON.parse(lines[i]);
+          const f = obj.archivo.substr(0,8),
+                num = (obj.archivo.match(/boletin-(\d+)/i)||[])[1]||'N/D',
+                fecha = `${f.slice(6)}/${f.slice(4,6)}/${f.slice(0,4)}`;
+          ultimaDiv.textContent = `Última actualización: Boletín N.º ${num} – ${fecha}`;
+          return;
+        } catch {}
+      }
+      ultimaDiv.textContent = 'Sin datos de actualización.';
     }
 
+    // Función para mostrar PDF con fallback
     async function cargarPDF(url) {
       pdfPreview.innerHTML = '<p>Cargando vista previa…</p>';
-      // Quitar fragmento #page= para Google Docs Viewer
-      const cleanUrl = url.split('#')[0];
-      const disponible = await verificarPDF(cleanUrl);
-      if (disponible) {
-        pdfPreview.innerHTML = `
-          <h3>Vista previa del boletín</h3>
-          <iframe 
-            src="https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(cleanUrl)}" 
-            allowfullscreen 
-            style="width:100%; height:600px; border:none;"
-          ></iframe>
-        `;
-      } else {
-        pdfPreview.innerHTML = `<p class="error">No se pudo cargar el PDF: ${cleanUrl}</p>`;
-      }
+      const clean = url.split('#')[0];
+      // Intento directo
+      const direct = document.createElement('iframe');
+      direct.src = clean;
+      direct.style.cssText = 'width:100%;height:600px;border:none;';
+      let loaded = false;
+      direct.onload = () => loaded = true;
+      direct.onerror = () => {
+        if (!loaded) {
+          // Fallback a Google Docs Viewer
+          const g = document.createElement('iframe');
+          g.src = 'https://docs.google.com/gview?embedded=true&url='+encodeURIComponent(clean);
+          g.style.cssText = 'width:100%;height:600px;border:none;';
+          pdfPreview.innerHTML = '<h3>Modo compatibilidad</h3>';
+          pdfPreview.appendChild(g);
+        }
+      };
+      pdfPreview.innerHTML = '<h3>Vista previa del boletín</h3>';
+      pdfPreview.appendChild(direct);
     }
 
+    // Búsqueda principal
     async function realizarBusqueda() {
       const q = input.value.trim();
       if (!q) {
-        resultadosDiv.innerHTML = '<p>Ingresá una palabra para buscar.</p>';
+        resultadosDiv.innerHTML = '<p>Ingresá una búsqueda.</p>';
         return;
       }
-
       botonBuscar.disabled = true;
       statusDiv.textContent = 'Buscando…';
       resultadosDiv.innerHTML = '';
       contador.textContent = '';
       pdfPreview.innerHTML = '';
-      progressBar.value = 0;
-
-      const totalChunks = await detectChunks();
-      progressBar.max = totalChunks || 1;
-
-      let matches = [];
-      let regex;
-      const searchType = document.querySelector('input[name="searchType"]:checked').value;
+      const total = await detectChunks();
+      progressBar.max = total||1;
+      let matches = [], regex;
+      const type = document.querySelector('input[name="searchType"]:checked').value;
       try {
-        if (searchType === 'endsWith') {
-          regex = new RegExp(`${q}$`, 'i');
-        } else if (searchType === 'or') {
-          regex = new RegExp(q.split('|').map(w => w.trim()).join('|'), 'i');
-        } else {
-          regex = new RegExp(q, 'i');
-        }
+        regex = type==='endsWith'
+          ? new RegExp(q+'$', 'i')
+          : type==='or'
+            ? new RegExp(q.split('|').map(w=>w.trim()).join('|'),'i')
+            : new RegExp(q,'i');
       } catch {
-        statusDiv.textContent = '';
-        botonBuscar.disabled = false;
-        resultadosDiv.innerHTML = '<p>Error en la expresión de búsqueda.</p>';
-        return;
+        statusDiv.textContent = ''; botonBuscar.disabled=false;
+        resultadosDiv.innerHTML = '<p>Error en expresión.</p>'; return;
       }
-
-      for (let i = 1; i <= totalChunks; i++) {
+      for (let i=1;i<=total;i++){
         try {
-          const text = await (await fetch(`json_chunks/boletines_part_${i}.jsonl`)).text();
-          for (let ln of text.split(/\r?\n/)) {
+          const txt = await (await fetch(`json_chunks/boletines_part_${i}.jsonl`)).text();
+          for (let ln of txt.split('\n')) {
             if (!ln) continue;
-            let obj;
-            try { obj = JSON.parse(ln); } catch { continue; }
+            const obj = JSON.parse(ln);
             if (regex.test(obj.fragmento)) matches.push(obj);
           }
         } catch {}
         progressBar.value = i;
       }
-
-      statusDiv.textContent = '';
-      botonBuscar.disabled = false;
-
-      const desde = document.getElementById("desde").value;
-      const hasta = document.getElementById("hasta").value;
-      const norm = v => v.replace(/-/g,'') + '01';
-      matches = matches.filter(m => {
-        const f = m.archivo.substring(0,8);
-        if (desde && f < norm(desde)) return false;
-        if (hasta && f > norm(hasta)) return false;
+      statusDiv.textContent=''; botonBuscar.disabled=false;
+      // Filtrado por fechas
+      const desde = document.getElementById('desde').value,
+            hasta = document.getElementById('hasta').value,
+            norm = v=>v.replace(/-/g,'')+'01';
+      matches = matches.filter(m=>{
+        const f=m.archivo.substr(0,8);
+        if(desde&&f<norm(desde))return false;
+        if(hasta&&f>norm(hasta))return false;
         return true;
       });
-
-      const orden = document.getElementById("orden").value;
-      matches.sort((a,b) => {
-        const fa = a.archivo.substring(0,8), fb = b.archivo.substring(0,8);
-        return orden === 'asc' ? fa.localeCompare(fb) : fb.localeCompare(fa);
+      // Orden
+      const orden = document.getElementById('orden').value;
+      matches.sort((a,b)=>{
+        const fa=a.archivo.substr(0,8), fb=b.archivo.substr(0,8);
+        return orden==='asc'?fa.localeCompare(fb):fb.localeCompare(fa);
       });
-
       if (!matches.length) {
-        resultadosDiv.innerHTML = '<p>No se encontraron resultados.</p>';
-        contador.textContent = '0 resultados encontrados.';
-        return;
+        resultadosDiv.innerHTML='<p>No hay resultados.</p>';
+        contador.textContent='0 resultados.'; return;
       }
-      contador.textContent = `${matches.length} resultado${matches.length > 1 ? 's' : ''} encontrado${matches.length > 1 ? 's' : ''}.`;
-
-      const meses = {
-        "01":"enero","02":"febrero","03":"marzo","04":"abril",
-        "05":"mayo","06":"junio","07":"julio","08":"agosto",
-        "09":"septiembre","10":"octubre","11":"noviembre","12":"diciembre"
-      };
-
-      if (matches.length > 0) {
-        const m = matches[0];
-        const fecha = m.archivo.substring(0,8);
-        const num = m.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/A';
-        const pagina = m.pagina && !isNaN(m.pagina) ? m.pagina : 1;
-        const urlPDF = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${pagina}`;
-        cargarPDF(urlPDF);
-      }
-
+      contador.textContent=`${matches.length} resultado${matches.length>1?'s':''}.`;
+      // Cargar primero
+      const m0=matches[0];
+      cargarPDF(`https://quilmes.gov.ar/pdf/boletines/${m0.archivo.match(/boletin-(\\d+)/i)[1]}.pdf#page=${m0.pagina}`);
+      // Mostrar lista
       for (let m of matches) {
-        const fecha = m.archivo.substring(0,8);
-        const anio = fecha.slice(0,4);
-        const mesNombre = meses[fecha.slice(4,6)] || fecha.slice(4,6);
-        const numMatch = m.archivo.match(/boletin-(\d+)/i);
-        const num = numMatch ? numMatch[1] : 'N/A';
-        const pagina = m.pagina && !isNaN(m.pagina) ? m.pagina : 1;
-        const texto = `Boletín Oficial Municipal N.º ${num} – ${mesNombre} de ${anio}`;
-        const urlPDF = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${pagina}`;
-
-        const div = document.createElement('div');
-        div.className = 'resultado';
-        div.innerHTML = `
-          <div class="linea">
-            <a href="${urlPDF}" target="_blank" rel="noopener noreferrer">${texto}</a> (Página ${pagina})
-            <span>← pulse para descargar el boletín PDF o pulse aquí para previsualizarlo más abajo</span>
-          </div>
-          <div class="fragmento">
-            ${m.fragmento.replace(regex, '<mark>$&</mark>')}
-          </div>
-        `;
-        div.addEventListener('click', () => cargarPDF(urlPDF));
+        const f=m.archivo.substr(0,8), a=f.slice(0,4), mes=f.slice(4,6),
+              mesN={'01':'enero','02':'feb','03':'marzo','04':'abril','05':'mayo','06':'junio','07':'julio','08':'ago','09':'sep','10':'oct','11':'nov','12':'dic'}[mes]||mes,
+              num=(m.archivo.match(/boletin-(\\d+)/i)||[])[1]||'N/A',
+              pg=m.pagina||1,
+              texto=`Boletín N.º ${num} – ${mesN} de ${a}`,
+              url=`https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${pg}`;
+        const div=document.createElement('div');
+        div.className='resultado';
+        div.innerHTML=`<div class="linea"><a href="${url}" target="_blank">${texto}</a> (p. ${pg})</div>
+                       <div class="fragmento">${m.fragmento.replace(regex,'<mark>$&</mark>')}</div>`;
+        div.onclick=()=>cargarPDF(url);
         resultadosDiv.appendChild(div);
       }
     }
 
-    async function mostrarUltimaActualizacion() {
-      const totalChunks = await detectChunks();
-      if (totalChunks === 0) {
-        ultimaActualizacionDiv.textContent = 'No se encontraron datos de actualización.';
-        return;
-      }
-
-      let ultimo = null;
-      for (let i = totalChunks; i > 0; i--) {
-        try {
-          const txt = await (await fetch(`json_chunks/boletines_part_${i}.jsonl`)).text();
-          const lineas = txt.trim().split(/\r?\n/).filter(Boolean);
-          for (let j = lineas.length - 1; j >= 0; j--) {
-            try {
-              const obj = JSON.parse(lineas[j]);
-              if (obj.archivo) {
-                ultimo = obj;
-                break;
-              }
-            } catch {}
-          }
-          if (ultimo) break;
-        } catch {}
-      }
-
-      if (!ultimo) {
-        ultimaActualizacionDiv.textContent = 'No se encontraron datos de actualización.';
-        return;
-      }
-
-      const fechaRaw = ultimo.archivo.substring(0, 8);
-      const numBoletin = ultimo.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/D';
-      const fechaFormateada = `${fechaRaw.slice(6,8)}/${fechaRaw.slice(4,6)}/${fechaRaw.slice(0,4)}`;
-
-      ultimaActualizacionDiv.textContent =
-        `Última actualización: Boletín N.º ${numBoletin} – ${fechaFormateada}`;
-    }
-
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') realizarBusqueda();
-    });
-    botonBuscar.addEventListener('click', realizarBusqueda);
+    input.addEventListener('keydown',e=>{ if(e.key==='Enter') realizarBusqueda(); });
+    botonBuscar.addEventListener('click',realizarBusqueda);
 
     mostrarUltimaActualizacion();
   </script>
