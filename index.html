@@ -51,22 +51,19 @@
       let matches = [];
       for (let url of CHUNKS) {
         try {
-          const resp = await fetch(url);
-          const text = await resp.text();
+          const text = await (await fetch(url)).text();
           for (let ln of text.split(/\r?\n/)) {
             if (!ln) continue;
             let obj;
             try { obj = JSON.parse(ln); } catch { continue; }
-            if (obj.fragmento.toLowerCase().includes(q)) {
-              matches.push(obj);
-            }
+            if (obj.fragmento.toLowerCase().includes(q)) matches.push(obj);
           }
         } catch (err) {
           console.error('Error cargando', url, err);
         }
       }
 
-      // Filtrar por fecha
+      // filtros de fecha
       const desde = document.getElementById("desde").value;
       const hasta = document.getElementById("hasta").value;
       const norm = v => v.replace(/-/g, '') + '01';
@@ -77,20 +74,19 @@
         return true;
       });
 
-      // Ordenar
+      // ordenar
       const orden = document.getElementById("orden").value;
       matches.sort((a,b) => {
         const fa = a.archivo.substring(0,8), fb = b.archivo.substring(0,8);
         return orden==='asc'? fa.localeCompare(fb) : fb.localeCompare(fa);
       });
 
-      // Mostrar
+      // mostrar
       if (matches.length === 0) {
         resultadosDiv.innerHTML = '<p>No se encontraron resultados.</p>';
         contador.textContent = '0 resultados encontrados.';
         return;
       }
-
       contador.textContent = `${matches.length} resultado${matches.length!==1?'s':''} encontrado${matches.length!==1?'s':''}.`;
       resultadosDiv.innerHTML = '';
 
@@ -101,19 +97,24 @@
       };
 
       for (let m of matches) {
-        // Extraer fecha y número
+        // extraer fecha y número
         const fecha = m.archivo.substring(0,8);
-        const mes = meses[fecha.slice(4,6)] || fecha.slice(4,6);
         const anio = fecha.slice(0,4);
-        const num = (m.archivo.match(/boletin-(\d+)/i)||[])[1];
-        const texto = `Boletín N.º ${num} – ${mes} de ${anio}`;
-        const pdf = m.archivo.replace('.txt','.pdf');
+        const mesNombre = meses[fecha.slice(4,6)] || fecha.slice(4,6);
+        const matchB = m.archivo.match(/boletin-(\d+)/i);
+        const num = matchB ? matchB[1] : '';
+        const texto = `Boletín Oficial Municipal N.º ${num} – ${mesNombre} de ${anio}`;
+        const urlPDF = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf`;
 
         const div = document.createElement('div');
         div.className = 'resultado';
         div.innerHTML = `
-          <div class="linea"><a href="pdfs/${encodeURIComponent(pdf)}" target="_blank">${texto}</a></div>
-          <div class="fragmento">${m.fragmento.replace(new RegExp(q.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&'), 'gi'), '<mark>$&</mark>')}</div>
+          <div class="linea">
+            <a href="${urlPDF}" target="_blank">${texto}</a>
+          </div>
+          <div class="fragmento">
+            ${m.fragmento.replace(new RegExp(q.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&'),'gi'), '<mark>$&</mark>')}
+          </div>
         `;
         resultadosDiv.appendChild(div);
       }
