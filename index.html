@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <title>Buscador de Boletines</title>
   <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet">
-  <script src="flexsearch.compact.min.js"></script>
   <style>
     body {
       font-family: 'Mohave', sans-serif;
@@ -68,7 +67,7 @@
       gap: .5rem;
     }
     #resultados {
-      max-height: 300px; /* Aproximadamente 3 resultados */
+      max-height: 300px;
       overflow-y: auto;
       border: 1px solid #ccc;
       border-radius: 8px;
@@ -128,7 +127,7 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V0.1.23</div>
+  <div id="version">V0.1.24</div>
 
   <script>
     const progressBar = document.getElementById('progressBar');
@@ -151,6 +150,7 @@
           break;
         }
       }
+      console.log(`Total chunks detectados: ${count}`);
       return count;
     }
 
@@ -170,7 +170,7 @@
       if (pdfDisponible) {
         pdfPreview.innerHTML = `
           <h3>Vista previa del boletín</h3>
-          <iframe src="${url}&toolbar=0" title="Vista previa del PDF" onerror="this.parentNode.innerHTML='<p class=error>No se pudo cargar el PDF: ${url}</p>'"></iframe>
+          <iframe src="${url}" title="Vista previa del PDF" onerror="this.parentNode.innerHTML='<p class=error>No se pudo cargar el PDF: ${url}</p>'"></iframe>
         `;
       } else {
         pdfPreview.innerHTML = `<p class="error">No se pudo cargar el PDF: ${url}. Verifique la URL o la disponibilidad del archivo.</p>`;
@@ -178,10 +178,14 @@
     }
 
     async function realizarBusqueda() {
+      console.log('Iniciando búsqueda...');
       const q = input.value.trim();
-      if (!q) return;
+      if (!q) {
+        console.log('No se ingresó una búsqueda válida.');
+        resultadosDiv.innerHTML = '<p>Ingresá una palabra para buscar.</p>';
+        return;
+      }
 
-      // Inicio
       botonBuscar.disabled = true;
       statusDiv.textContent = 'Buscando…';
       resultadosDiv.innerHTML = '';
@@ -195,6 +199,7 @@
       let matches = [];
       let regex;
       const searchType = document.querySelector('input[name="searchType"]:checked').value;
+      console.log(`Tipo de búsqueda seleccionado: ${searchType}`);
       try {
         if (searchType === 'endsWith') {
           regex = new RegExp(`${q}$`, 'i');
@@ -203,16 +208,18 @@
         } else {
           regex = new RegExp(q, 'i');
         }
-      } catch {
+        console.log(`Regex creada: ${regex}`);
+      } catch (e) {
+        console.error('Error al crear la regex:', e);
         statusDiv.textContent = '';
         botonBuscar.disabled = false;
         resultadosDiv.innerHTML = '<p>Error en la expresión de búsqueda.</p>';
         return;
       }
 
-      // Recorrer chunks
       for (let i = 1; i <= totalChunks; i++) {
         try {
+          console.log(`Cargando chunk ${i}...`);
           const text = await (await fetch(`json_chunks/boletines_part_${i}.jsonl`)).text();
           for (let ln of text.split(/\r?\n/)) {
             if (!ln) continue;
@@ -220,17 +227,18 @@
             try { obj = JSON.parse(ln); } catch { continue; }
             if (regex.test(obj.fragmento)) matches.push(obj);
           }
+          console.log(`Matches encontrados en chunk ${i}: ${matches.length}`);
         } catch (e) {
-          console.error('Error chunk', i, e);
+          console.error('Error al cargar chunk', i, e);
         }
         progressBar.value = i;
       }
 
-      // Fin búsqueda
+      console.log(`Total matches antes de filtrar: ${matches.length}`);
+
       statusDiv.textContent = '';
       botonBuscar.disabled = false;
 
-      // Filtro fechas
       const desde = document.getElementById("desde").value;
       const hasta = document.getElementById("hasta").value;
       const norm = v => v.replace(/-/g,'') + '01';
@@ -240,18 +248,18 @@
         if (hasta && f > norm(hasta)) return false;
         return true;
       });
+      console.log(`Matches después de filtrar por fechas: ${matches.length}`);
 
-      // Ordenar
       const orden = document.getElementById("orden").value;
       matches.sort((a,b) => {
         const fa = a.archivo.substring(0,8), fb = b.archivo.substring(0,8);
         return orden === 'asc' ? fa.localeCompare(fb) : fb.localeCompare(fa);
       });
 
-      // Mostrar resultados
       if (!matches.length) {
         resultadosDiv.innerHTML = '<p>No se encontraron resultados.</p>';
         contador.textContent = '0 resultados encontrados.';
+        console.log('No se encontraron resultados.');
         return;
       }
       contador.textContent = `${matches.length} resultado${matches.length > 1 ? 's' : ''} encontrado${matches.length > 1 ? 's' : ''}.`;
@@ -262,17 +270,13 @@
         "09":"septiembre","10":"octubre","11":"noviembre","12":"diciembre"
       };
 
-      // Cargar el PDF más reciente automáticamente
-      let urlPDFMasReciente = '';
       if (matches.length > 0) {
-        const masReciente = matches[0]; // Primer resultado después de ordenar por 'desc'
+        const masReciente = matches[0];
         const fechaReciente = masReciente.archivo.substring(0,8);
-        const anioReciente = fechaReciente.slice(0,4);
-        const mesNombreReciente = meses[fechaReciente.slice(4,6)] || fechaReciente.slice(4,6);
         const numReciente = masReciente.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/A';
         const paginaReciente = masReciente.pagina && !isNaN(masReciente.pagina) ? masReciente.pagina : 1;
-        urlPDFMasReciente = `https://quilmes.gov.ar/pdf/boletines/boletin-${numReciente}.pdf#page=${paginaReciente}`;
-        console.log(`PDF más reciente: num=${numReciente}, pagina=${paginaReciente}, urlPDF=${urlPDFMasReciente}`);
+        const urlPDFMasReciente = `https://quilmes.gov.ar/pdf/boletines/boletin-${numReciente}.pdf#page=${paginaReciente}`;
+        console.log(`Cargando PDF más reciente: ${urlPDFMasReciente}`);
         cargarPDF(urlPDFMasReciente);
       }
 
@@ -286,14 +290,12 @@
         const texto = `Boletín Oficial Municipal N.º ${num} – ${mesNombre} de ${anio}`;
         const urlPDF = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${pagina}`;
 
-        console.log(`Resultado: num=${num}, pagina=${pagina}, urlPDF=${urlPDF}`);
-
         const div = document.createElement('div');
         div.className = 'resultado';
         div.innerHTML = `
           <div class="linea">
             <a href="${urlPDF}" target="_blank">${texto}</a> (Página ${pagina})
-            <span>&larr; pulse para descargar el boletín pdf o pulse aquí para previsualizarlo más abajo</span>
+            <span>← pulse para descargar el boletín pdf o pulse aquí para previsualizarlo más abajo</span>
           </div>
           <div class="fragmento">
             ${m.fragmento.replace(regex, '<mark>$&</mark>')}
@@ -304,8 +306,16 @@
       }
     }
 
-    input.addEventListener('keydown', e => e.key === 'Enter' && realizarBusqueda());
-    botonBuscar.addEventListener('click', realizar PurificaciónrealizarBusqueda);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        console.log('Se presionó Enter en el input de búsqueda');
+        realizarBusqueda();
+      }
+    });
+    botonBuscar.addEventListener('click', () => {
+      console.log('Se hizo clic en el botón Buscar');
+      realizarBusqueda();
+    });
   </script>
 </body>
 </html>
