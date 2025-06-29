@@ -1,44 +1,36 @@
-name: Actualizar Boletines
+name: Actualizar boletines
 
 on:
+  workflow_dispatch:
   schedule:
-    - cron: '0 6 * * *'  # Todos los días a las 06:00 UTC
-  workflow_dispatch:    # Para correr manualmente si quieres
+    - cron: '30 10 * * 1-5'  # Corre de lunes a viernes a las 10:30 UTC
 
 jobs:
-  actualizar:
+  update:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Chequear repo
+      - name: Checkout repo
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0  # Para poder pushear cambios luego
 
-      - name: Configurar Python 3.11
+      - name: Configurar Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: 3.11
 
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
-          pip install requests pymupdf
+          pip install requests tqdm PyMuPDF
 
-      - name: Ejecutar update_boletines.py
+      - name: Ejecutar actualización
         run: python scripts/update_boletines.py
 
-      - name: Configurar Git para push
+      - name: Subir cambios
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Detectar cambios y hacer push
-        run: |
-          if [[ `git status --porcelain` ]]; then
-            git add json_chunks/*.jsonl ultima_actualizacion.json
-            git commit -m "Actualización automática de boletines y última actualización"
-            git push
-          else
-            echo "No hay cambios para subir."
-          fi
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add .
+          git commit -m "Actualización automática de boletines"
+          git push
+        continue-on-error: true
