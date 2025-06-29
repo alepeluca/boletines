@@ -33,7 +33,7 @@
       border-radius: 6px;
       cursor: pointer;
       max-width: 900px;
-      width: 90%;
+      width: 100%;
     }
     .linea {
       font-weight: bold;
@@ -90,11 +90,11 @@
       color: red;
       font-weight: bold;
     }
-    #version {
+    #version, #ultimaActualizacion {
       text-align: center;
-      font-size: 0.8rem;
+      font-size: 0.9rem;
       color: #666;
-      margin-top: 2rem;
+      margin-top: 1rem;
     }
   </style>
 </head>
@@ -127,7 +127,8 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V0.1.31</div>
+  <div id="ultimaActualizacion"></div>
+  <div id="version">V0.1.32</div>
 
   <script>
     const progressBar = document.getElementById('progressBar');
@@ -151,6 +152,28 @@
         }
       }
       return count;
+    }
+
+    async function verificarPDF(url) {
+      try {
+        const res = await fetch(url, { method: 'HEAD' });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    async function cargarPDF(url) {
+      pdfPreview.innerHTML = '<p>Cargando vista previa…</p>';
+      const disponible = await verificarPDF(url);
+      if (disponible) {
+        pdfPreview.innerHTML = `
+          <h3>Vista previa del boletín</h3>
+          <iframe src="https://drive.google.com/viewerng/viewer?embedded=true&url=${encodeURIComponent(url)}"></iframe>
+        `;
+      } else {
+        pdfPreview.innerHTML = `<p class="error">No se pudo cargar el PDF: ${url}</p>`;
+      }
     }
 
     async function realizarBusqueda() {
@@ -225,7 +248,6 @@
         contador.textContent = '0 resultados encontrados.';
         return;
       }
-
       contador.textContent = `${matches.length} resultado${matches.length > 1 ? 's' : ''} encontrado${matches.length > 1 ? 's' : ''}.`;
 
       const meses = {
@@ -234,47 +256,78 @@
         "09":"septiembre","10":"octubre","11":"noviembre","12":"diciembre"
       };
 
-      const mostrarPDF = (num, pagina) => {
-        const pdfURL = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf`;
-        pdfPreview.innerHTML = `
-          <h3>Vista previa del boletín N.º ${num} – Página ${pagina}</h3>
-          <iframe src="https://docs.google.com/gview?url=${encodeURIComponent(pdfURL)}&embedded=true"></iframe>
-        `;
-      };
-
       if (matches.length > 0) {
         const m = matches[0];
-        const num = m.archivo.match(/boletin-(\d+)/i)?.[1];
+        const fecha = m.archivo.substring(0,8);
+        const num = m.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/A';
         const pagina = m.pagina && !isNaN(m.pagina) ? m.pagina : 1;
-        mostrarPDF(num, pagina);
+        const urlPDF = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${pagina}`;
+        cargarPDF(urlPDF);
       }
 
       for (let m of matches) {
         const fecha = m.archivo.substring(0,8);
         const anio = fecha.slice(0,4);
         const mesNombre = meses[fecha.slice(4,6)] || fecha.slice(4,6);
-        const num = m.archivo.match(/boletin-(\d+)/i)?.[1];
+        const numMatch = m.archivo.match(/boletin-(\d+)/i);
+        const num = numMatch ? numMatch[1] : 'N/A';
         const pagina = m.pagina && !isNaN(m.pagina) ? m.pagina : 1;
         const texto = `Boletín Oficial Municipal N.º ${num} – ${mesNombre} de ${anio}`;
+        const urlPDF = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${pagina}`;
 
         const div = document.createElement('div');
         div.className = 'resultado';
         div.innerHTML = `
           <div class="linea">
-            <a href="https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf" target="_blank">${texto}</a> (Página ${pagina})
-            <span>← pulse para descargar o pulse aquí para previsualizar</span>
+            <a href="${urlPDF}" target="_blank">${texto}</a> (Página ${pagina})
+            <span>← pulse para descargar el boletín PDF o pulse aquí para previsualizarlo más abajo</span>
           </div>
-          <div class="fragmento">${m.fragmento.replace(regex, '<mark>$&</mark>')}</div>
+          <div class="fragmento">
+            ${m.fragmento.replace(regex, '<mark>$&</mark>')}
+          </div>
         `;
-        div.addEventListener('click', () => mostrarPDF(num, pagina));
+        div.addEventListener('click', () => cargarPDF(urlPDF));
         resultadosDiv.appendChild(div);
       }
+    }
+
+    async function mostrarUltimaActualizacion() {
+      const totalChunks = await detectChunks();
+      if (totalChunks === 0) return;
+
+      let ultimo = null;
+      for (let i = totalChunks; i > 0; i--) {
+        try {
+          const txt = await (await fetch(`json_chunks/boletines_part_${i}.jsonl`)).text();
+          const lineas = txt.trim().split(/\r?\n/).filter(Boolean);
+          for (let j = lineas.length - 1; j >= 0; j--) {
+            try {
+              const obj = JSON.parse(lineas[j]);
+              if (obj.archivo) {
+                ultimo = obj;
+                break;
+              }
+            } catch {}
+          }
+          if (ultimo) break;
+        } catch {}
+      }
+
+      if (!ultimo) return;
+
+      const fechaRaw = ultimo.archivo.substring(0, 8);
+      const numBoletin = ultimo.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/D';
+      const fechaFormateada = `${fechaRaw.slice(6,8)}/${fechaRaw.slice(4,6)}/${fechaRaw.slice(0,4)}`;
+
+      document.getElementById('ultimaActualizacion').textContent =
+        `Última actualización: Boletín N.º ${numBoletin} – ${fechaFormateada}`;
     }
 
     input.addEventListener('keydown', e => {
       if (e.key === 'Enter') realizarBusqueda();
     });
     botonBuscar.addEventListener('click', realizarBusqueda);
+    mostrarUltimaActualizacion();
   </script>
 </body>
 </html>
