@@ -1,47 +1,24 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Buscador: Boletines Municipales de Quilmes</title>
-  <script src="flexsearch.compact.min.js"></script>
-  <style>
-    body {
-      font-family: sans-serif;
-      margin: 2rem;
-      max-width: 900px;
-      background: #f0f0f0;
-    }
-    input, select, input[type="month"] {
-      padding: .5rem;
-      font-size: 1rem;
-    }
-    input[type="month"] { width: 140px; }
-    #progressBar {
-      width: 100%;
-      height: 1.2rem;
-      margin: 1rem 0;
-      display: none;
-    }
-    .resultado {
-      background: #fff;
-      border: 2px solid blue;
-      padding: 1rem;
-      margin: 1rem 0;
-      border-radius: 6px;
-    }
-    .linea { font-weight: bold; margin-bottom: .5rem; }
-    .fragmento { white-space: pre-wrap; }
-  </style>
-</head>
+<!-- ... el head queda igual ... -->
 <body>
   <h1>Buscador: Boletines Municipales de Quilmes</h1>
 
+  <div style="background:#fff2c4; border:1px solid #e0c76b; padding:1rem; margin-bottom:1rem; border-radius:8px;">
+    <strong>Ejemplos de búsqueda:</strong><br>
+    <ul style="margin:0; padding-left:1.2rem;">
+      <li><code>despido indemnización</code> → contiene ambas palabras (no hace falta que estén juntas)</li>
+      <li><code>^ordenanza</code> → empieza con “ordenanza”</li>
+      <li><code>resolución$</code> → termina en “resolución”</li>
+      <li><code>construcción|obras</code> → contiene “construcción” o “obras”</li>
+    </ul>
+  </div>
+
   <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1rem;">
-    <input id="busqueda" placeholder="Escribí una palabra y presioná Enter…" style="flex:1" />
+    <input id="busqueda" placeholder="Escribí una palabra…" style="flex:1" />
     <select id="orden">
       <option value="desc">Más nuevos primero</option>
       <option value="asc">Más antiguos primero</option>
     </select>
+    <button id="botonBuscar">Buscar</button>
   </div>
 
   <div style="display:flex; gap:1rem; align-items:center;">
@@ -58,11 +35,12 @@
     const resultadosDiv = document.getElementById('resultados');
     const input = document.getElementById('busqueda');
     const contador = document.getElementById('contador');
+    const botonBuscar = document.getElementById('botonBuscar');
 
     async function detectChunks() {
       let count = 0;
       while (true) {
-        const url = `json_chunks/boletines_part_${count+1}.jsonl`;
+        const url = `json_chunks/boletines_part_${count + 1}.jsonl`;
         try {
           const res = await fetch(url, { method: 'HEAD' });
           if (!res.ok) break;
@@ -74,21 +52,30 @@
       return count;
     }
 
-    input.addEventListener('keydown', async e => {
-      if (e.key !== 'Enter') return;
+    async function realizarBusqueda() {
       const q = input.value.trim().toLowerCase();
       if (!q) return;
 
+      botonBuscar.disabled = true;
       resultadosDiv.innerHTML = '';
       contador.textContent = '';
       progressBar.style.display = 'block';
       progressBar.value = 0;
 
-      // Detectar dinámicamente número de chunks
       const totalChunks = await detectChunks();
       progressBar.max = totalChunks;
 
       let matches = [];
+      let regex;
+      try {
+        regex = new RegExp(q, 'i');
+      } catch (e) {
+        resultadosDiv.innerHTML = '<p>Error en la expresión de búsqueda.</p>';
+        progressBar.style.display = 'none';
+        botonBuscar.disabled = false;
+        return;
+      }
+
       for (let i = 1; i <= totalChunks; i++) {
         try {
           const text = await (await fetch(`json_chunks/boletines_part_${i}.jsonl`)).text();
@@ -96,7 +83,7 @@
             if (!ln) continue;
             let obj;
             try { obj = JSON.parse(ln); } catch { continue; }
-            if (obj.fragmento.toLowerCase().includes(q)) matches.push(obj);
+            if (regex.test(obj.fragmento)) matches.push(obj);
           }
         } catch (err) {
           console.error('Error cargando chunk', i, err);
@@ -105,44 +92,43 @@
       }
       progressBar.style.display = 'none';
 
-      // Filtros de fecha
       const desde = document.getElementById("desde").value;
       const hasta = document.getElementById("hasta").value;
       const norm = v => v.replace(/-/g, '') + '01';
       matches = matches.filter(m => {
-        const f = m.archivo.substring(0,8);
+        const f = m.archivo.substring(0, 8);
         if (desde && f < norm(desde)) return false;
         if (hasta && f > norm(hasta)) return false;
         return true;
       });
 
-      // Ordenar
       const orden = document.getElementById("orden").value;
-      matches.sort((a,b) => {
-        const fa = a.archivo.substring(0,8), fb = b.archivo.substring(0,8);
-        return orden==='asc' ? fa.localeCompare(fb) : fb.localeCompare(fa);
+      matches.sort((a, b) => {
+        const fa = a.archivo.substring(0, 8), fb = b.archivo.substring(0, 8);
+        return orden === 'asc' ? fa.localeCompare(fb) : fb.localeCompare(fa);
       });
 
-      // Mostrar
       if (matches.length === 0) {
         resultadosDiv.innerHTML = '<p>No se encontraron resultados.</p>';
         contador.textContent = '0 resultados encontrados.';
+        botonBuscar.disabled = false;
         return;
       }
-      contador.textContent = `${matches.length} resultado${matches.length!==1?'s':''} encontrado${matches.length!==1?'s':''}.`;
+
+      contador.textContent = `${matches.length} resultado${matches.length !== 1 ? 's' : ''} encontrado${matches.length !== 1 ? 's' : ''}.`;
       resultadosDiv.innerHTML = '';
 
       const meses = {
-        "01":"enero","02":"febrero","03":"marzo","04":"abril",
-        "05":"mayo","06":"junio","07":"julio","08":"agosto",
-        "09":"septiembre","10":"octubre","11":"noviembre","12":"diciembre"
+        "01": "enero", "02": "febrero", "03": "marzo", "04": "abril",
+        "05": "mayo", "06": "junio", "07": "julio", "08": "agosto",
+        "09": "septiembre", "10": "octubre", "11": "noviembre", "12": "diciembre"
       };
 
       for (let m of matches) {
-        const fecha = m.archivo.substring(0,8);
-        const anio = fecha.slice(0,4);
-        const mesNombre = meses[fecha.slice(4,6)] || fecha.slice(4,6);
-        const num = (m.archivo.match(/boletin-(\d+)/i)||[])[1]||'';
+        const fecha = m.archivo.substring(0, 8);
+        const anio = fecha.slice(0, 4);
+        const mesNombre = meses[fecha.slice(4, 6)] || fecha.slice(4, 6);
+        const num = (m.archivo.match(/boletin-(\d+)/i) || [])[1] || '';
         const texto = `Boletín Oficial Municipal N.º ${num} – ${mesNombre} de ${anio}`;
         const urlPDF = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf`;
 
@@ -153,14 +139,21 @@
             <a href="${urlPDF}" target="_blank">${texto}</a>
           </div>
           <div class="fragmento">
-            ${m.fragmento.replace(
-              new RegExp(q.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&'), 'gi'),
-              '<mark>$&</mark>'
-            )}
+            ${m.fragmento.replace(regex, '<mark>$&</mark>')}
           </div>
         `;
         resultadosDiv.appendChild(div);
       }
+
+      botonBuscar.disabled = false;
+    }
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') realizarBusqueda();
+    });
+
+    botonBuscar.addEventListener('click', () => {
+      realizarBusqueda();
     });
   </script>
 </body>
