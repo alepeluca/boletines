@@ -97,10 +97,18 @@
       font-size: 0.9rem;
       color: #666;
       margin-top: 1rem;
+      margin-bottom: 1rem;
+    }
+    #ultimaActualizacion {
+      font-weight: bold;
+      font-size: 1.1rem;
     }
   </style>
 </head>
 <body>
+
+  <div id="ultimaActualizacion">Cargando última actualización...</div>
+
   <div id="searchContainer">
     <div id="searchOptions">
       <label><input type="radio" name="searchType" value="contains" checked /> Contiene</label>
@@ -129,8 +137,8 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="ultimaActualizacion"></div>
-  <div id="version">V0.1.33</div>
+
+  <div id="version">V0.1.34</div>
 
   <script>
     const progressBar = document.getElementById('progressBar');
@@ -140,6 +148,7 @@
     const contador = document.getElementById('contador');
     const botonBuscar = document.getElementById('botonBuscar');
     const pdfPreview = document.getElementById('pdfPreview');
+    const ultimaActualizacionDiv = document.getElementById('ultimaActualizacion');
 
     async function detectChunks() {
       let count = 0;
@@ -167,18 +176,20 @@
 
     async function cargarPDF(url) {
       pdfPreview.innerHTML = '<p>Cargando vista previa…</p>';
-      const disponible = await verificarPDF(url);
+      // Quitar fragmento #page= para Google Docs Viewer
+      const cleanUrl = url.split('#')[0];
+      const disponible = await verificarPDF(cleanUrl);
       if (disponible) {
         pdfPreview.innerHTML = `
           <h3>Vista previa del boletín</h3>
           <iframe 
-            src="https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(url)}" 
+            src="https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(cleanUrl)}" 
             allowfullscreen 
             style="width:100%; height:600px; border:none;"
           ></iframe>
         `;
       } else {
-        pdfPreview.innerHTML = `<p class="error">No se pudo cargar el PDF: ${url}</p>`;
+        pdfPreview.innerHTML = `<p class="error">No se pudo cargar el PDF: ${cleanUrl}</p>`;
       }
     }
 
@@ -299,7 +310,10 @@
 
     async function mostrarUltimaActualizacion() {
       const totalChunks = await detectChunks();
-      if (totalChunks === 0) return;
+      if (totalChunks === 0) {
+        ultimaActualizacionDiv.textContent = 'No se encontraron datos de actualización.';
+        return;
+      }
 
       let ultimo = null;
       for (let i = totalChunks; i > 0; i--) {
@@ -319,13 +333,16 @@
         } catch {}
       }
 
-      if (!ultimo) return;
+      if (!ultimo) {
+        ultimaActualizacionDiv.textContent = 'No se encontraron datos de actualización.';
+        return;
+      }
 
       const fechaRaw = ultimo.archivo.substring(0, 8);
       const numBoletin = ultimo.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/D';
       const fechaFormateada = `${fechaRaw.slice(6,8)}/${fechaRaw.slice(4,6)}/${fechaRaw.slice(0,4)}`;
 
-      document.getElementById('ultimaActualizacion').textContent =
+      ultimaActualizacionDiv.textContent =
         `Última actualización: Boletín N.º ${numBoletin} – ${fechaFormateada}`;
     }
 
@@ -333,6 +350,7 @@
       if (e.key === 'Enter') realizarBusqueda();
     });
     botonBuscar.addEventListener('click', realizarBusqueda);
+
     mostrarUltimaActualizacion();
   </script>
 </body>
