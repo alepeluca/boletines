@@ -42,7 +42,7 @@
       align-items: center;
       gap: 1rem;
     }
-    .linea a { text-decoration: none; }
+    .linea a { text-decoration: none; color: #0066cc; }
     .linea span { font-size: 0.9rem; font-weight: normal; color: #555; }
     .fragmento { white-space: pre-wrap; }
     #status { font-style: italic; margin-bottom: .5rem; text-align: center; }
@@ -127,7 +127,7 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V0.1.27</div>
+  <div id="version">V0.1.26</div>
 
   <script>
     const progressBar = document.getElementById('progressBar');
@@ -153,22 +153,14 @@
       return count;
     }
 
-    async function verificarPDF(url) {
-      try {
-        const res = await fetch(url, { method: 'HEAD' });
-        return res.ok;
-      } catch {
-        return false;
-      }
-    }
-
-    async function cargarPDF(url) {
-      pdfPreview.innerHTML = '<p>Cargando vista previa...</p>';
+    // NUEVA función: carga el PDF vía Google Docs Viewer
+    function cargarPDF(url) {
+      pdfPreview.innerHTML = '<p>Cargando vista previa…</p>';
       const urlEscaped = encodeURIComponent(url);
       const googleViewerUrl = `https://docs.google.com/gview?url=${urlEscaped}&embedded=true`;
       pdfPreview.innerHTML = `
         <h3>Vista previa del boletín</h3>
-        <iframe src="${googleViewerUrl}" title="Vista previa del PDF" style="width:100%; height:600px;" frameborder="0"></iframe>
+        <iframe src="${googleViewerUrl}" title="Vista previa del PDF"></iframe>
       `;
     }
 
@@ -246,36 +238,35 @@
       }
       contador.textContent = `${matches.length} resultado${matches.length > 1 ? 's' : ''} encontrado${matches.length > 1 ? 's' : ''}.`;
 
+      // Cargar el más reciente al inicio
+      const masReciente = matches[0];
+      const numReciente = masReciente.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/A';
+      const paginaReciente = masReciente.pagina || 1;
+      const urlPDFMasReciente = `https://quilmes.gov.ar/institucional/gobierno_abierto/boletin-${numReciente}.pdf#page=${paginaReciente}`;
+      cargarPDF(urlPDFMasReciente);
+
+      // Mostrar lista de resultados
       const meses = {
         "01":"enero","02":"febrero","03":"marzo","04":"abril",
         "05":"mayo","06":"junio","07":"julio","08":"agosto",
         "09":"septiembre","10":"octubre","11":"noviembre","12":"diciembre"
       };
 
-      const masReciente = matches[0];
-      const numReciente = masReciente.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/A';
-      const paginaReciente = masReciente.pagina && !isNaN(masReciente.pagina) ? masReciente.pagina : 1;
-      const urlPDFMasReciente = `https://quilmes.gov.ar/pdf/boletines/boletin-${numReciente}.pdf#page=${paginaReciente}`;
-      cargarPDF(urlPDFMasReciente);
-
-      
-
       for (let m of matches) {
         const fecha = m.archivo.substring(0,8);
         const anio = fecha.slice(0,4);
         const mesNombre = meses[fecha.slice(4,6)] || fecha.slice(4,6);
-        const numMatch = m.archivo.match(/boletin-(\d+)/i);
-        const num = numMatch ? numMatch[1] : 'N/A';
-        const pagina = m.pagina && !isNaN(m.pagina) ? m.pagina : 1;
+        const num = m.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/A';
+        const pagina = m.pagina || 1;
         const texto = `Boletín Oficial Municipal N.º ${num} – ${mesNombre} de ${anio}`;
-        const urlPDF = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${pagina}`;
+        const urlPDF = `https://quilmes.gov.ar/institucional/gobierno_abierto/boletin-${num}.pdf#page=${pagina}`;
 
         const div = document.createElement('div');
         div.className = 'resultado';
         div.innerHTML = `
           <div class="linea">
             <a href="${urlPDF}" target="_blank">${texto}</a> (Página ${pagina})
-            <span>← pulse para descargar el boletín pdf o pulse aquí para previsualizarlo más abajo</span>
+            <span>← clic para descargar o previsualizar abajo</span>
           </div>
           <div class="fragmento">
             ${m.fragmento.replace(regex, '<mark>$&</mark>')}
@@ -289,7 +280,7 @@
     input.addEventListener('keydown', e => {
       if (e.key === 'Enter') realizarBusqueda();
     });
-    botonBuscar.addEventListener('click', () => realizarBusqueda());
+    botonBuscar.addEventListener('click', realizarBusqueda);
   </script>
 </body>
 </html>
