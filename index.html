@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Buscador de Boletines</title>
-  <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet">
   <style>
     body {
       font-family: 'Mohave', sans-serif;
@@ -127,7 +127,7 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V0.1.30</div>
+  <div id="version">V0.1.31</div>
 
   <script>
     const progressBar = document.getElementById('progressBar');
@@ -181,7 +181,7 @@
         } else {
           regex = new RegExp(q, 'i');
         }
-      } catch (e) {
+      } catch {
         statusDiv.textContent = '';
         botonBuscar.disabled = false;
         resultadosDiv.innerHTML = '<p>Error en la expresión de búsqueda.</p>';
@@ -225,6 +225,7 @@
         contador.textContent = '0 resultados encontrados.';
         return;
       }
+
       contador.textContent = `${matches.length} resultado${matches.length > 1 ? 's' : ''} encontrado${matches.length > 1 ? 's' : ''}.`;
 
       const meses = {
@@ -233,46 +234,41 @@
         "09":"septiembre","10":"octubre","11":"noviembre","12":"diciembre"
       };
 
-      const baseViewerURL = "https://alepeluca.github.io/boletines/pdfjs/web/viewer.html";
+      const mostrarPDF = (num, pagina) => {
+        const pdfURL = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf`;
+        pdfPreview.innerHTML = `
+          <h3>Vista previa del boletín N.º ${num} – Página ${pagina}</h3>
+          <iframe src="https://docs.google.com/gview?url=${encodeURIComponent(pdfURL)}&embedded=true"></iframe>
+        `;
+      };
 
-      const masReciente = matches[0];
-      const numReciente = masReciente.archivo.match(/boletin-(\d+)/i)?.[1] || 'N/A';
-      const paginaReciente = masReciente.pagina && !isNaN(masReciente.pagina) ? masReciente.pagina : 1;
-      const viewerURLReciente = `${baseViewerURL}?file=${encodeURIComponent(`https://quilmes.gov.ar/pdf/boletines/boletin-${numReciente}.pdf`)}#page=${paginaReciente}`;
-      cargarPDF(viewerURLReciente);
+      if (matches.length > 0) {
+        const m = matches[0];
+        const num = m.archivo.match(/boletin-(\d+)/i)?.[1];
+        const pagina = m.pagina && !isNaN(m.pagina) ? m.pagina : 1;
+        mostrarPDF(num, pagina);
+      }
 
       for (let m of matches) {
         const fecha = m.archivo.substring(0,8);
         const anio = fecha.slice(0,4);
         const mesNombre = meses[fecha.slice(4,6)] || fecha.slice(4,6);
-        const numMatch = m.archivo.match(/boletin-(\d+)/i);
-        const num = numMatch ? numMatch[1] : 'N/A';
+        const num = m.archivo.match(/boletin-(\d+)/i)?.[1];
         const pagina = m.pagina && !isNaN(m.pagina) ? m.pagina : 1;
-
         const texto = `Boletín Oficial Municipal N.º ${num} – ${mesNombre} de ${anio}`;
-        const viewerURL = `${baseViewerURL}?file=${encodeURIComponent(`https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf`)}#page=${pagina}`;
 
         const div = document.createElement('div');
         div.className = 'resultado';
         div.innerHTML = `
           <div class="linea">
-            <a href="${viewerURL}" target="_blank">${texto}</a> (Página ${pagina})
-            <span>← pulse para descargar el boletín PDF o verlo abajo</span>
+            <a href="https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf" target="_blank">${texto}</a> (Página ${pagina})
+            <span>← pulse para descargar o pulse aquí para previsualizar</span>
           </div>
-          <div class="fragmento">
-            ${m.fragmento.replace(regex, '<mark>$&</mark>')}
-          </div>
+          <div class="fragmento">${m.fragmento.replace(regex, '<mark>$&</mark>')}</div>
         `;
-        div.addEventListener('click', () => cargarPDF(viewerURL));
+        div.addEventListener('click', () => mostrarPDF(num, pagina));
         resultadosDiv.appendChild(div);
       }
-    }
-
-    function cargarPDF(url) {
-      pdfPreview.innerHTML = `
-        <h3>Vista previa del boletín</h3>
-        <iframe src="${url}" title="Vista previa PDF"></iframe>
-      `;
     }
 
     input.addEventListener('keydown', e => {
