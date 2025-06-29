@@ -1,50 +1,23 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Buscador de Boletines</title>
-  <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet">
   <style>
-    body {
-      font-family: 'Mohave', sans-serif;
-      margin: 2rem auto;
-      max-width: 900px;
-      background: #f0f0f0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    input, select, input[type="month"], button {
-      padding: .5rem; font-size: 1rem;
-    }
-    input[type="month"] { width: 140px; }
-    #progressBar {
-      width: 100%; max-width: 900px; height: 1.2rem; margin: 1rem 0;
-    }
-    .resultado {
-      background: #fff; border: 2px solid blue; padding: 1rem;
-      margin: 1rem 0; border-radius: 6px; cursor: pointer;
-      max-width: 900px; width: 90%;
-    }
-    .linea {
-      font-weight: bold; margin-bottom: .5rem;
-      display: flex; align-items: center; gap: 1rem;
-    }
+    body { font-family: 'Mohave', sans-serif; margin: 2rem auto; max-width: 900px; background: #f0f0f0; display: flex; flex-direction: column; align-items: center; }
+    #ultimaActualizacion { font-weight: bold; margin-bottom: 1rem; }
+    #searchContainer, #dateContainer { width: 100%; max-width: 900px; margin-bottom: 1rem; }
+    #searchOptions { display: flex; gap: 1rem; margin-bottom: 1rem; justify-content: center; }
+    #resultados { width: 90%; max-width: 900px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; max-height: 300px; overflow-y: auto; }
+    .resultado { border: 2px solid blue; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; cursor: pointer; }
+    .linea { font-weight: bold; margin-bottom: .5rem; }
     .fragmento { white-space: pre-wrap; }
-    #status { font-style: italic; text-align: center; }
-    #contador { font-weight: bold; text-align: center; }
-    #resultados { width:100%; max-width:900px; background:#fff; border:1px solid #ccc;
-      border-radius:8px; padding:1rem; max-height:300px; overflow-y:auto; }
-    #pdfPreview {
-      width:100%; max-width:900px; min-height:600px;
-      background:#fff; border:1px solid #ccc; border-radius:8px;
-      padding:1rem; text-align:center;
-    }
-    #pdfPreview iframe { width:100%; height:600px; border:none; }
-    #version, #ultimaActualizacion {
-      text-align:center; font-size:0.9rem; color:#666; margin:1rem 0;
-    }
-    #ultimaActualizacion { font-weight:bold; font-size:1.1rem; }
+    #pdfPreview { width: 100%; max-width: 900px; min-height: 600px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; }
+    #pdfPreview iframe { width: 100%; height: 600px; border: none; }
+    #status, #contador { width: 100%; text-align: center; margin: .5rem 0; }
+    progress { width: 100%; max-width: 900px; }
+    #version { margin-top: 1rem; color: #666; font-size: .9rem; }
   </style>
 </head>
 <body>
@@ -53,25 +26,21 @@
 
   <div id="searchContainer">
     <div id="searchOptions">
-      <label><input type="radio" name="searchType" value="contains" checked /> Contiene</label>
-      <label><input type="radio" name="searchType" value="endsWith" /> Termina en</label>
-      <label><input type="radio" name="searchType" value="or" /> Contiene alguna palabra</label>
+      <label><input type="radio" name="searchType" value="contains" checked> Contiene</label>
+      <label><input type="radio" name="searchType" value="endsWith"> Termina en</label>
+      <label><input type="radio" name="searchType" value="or"> Alguna palabra</label>
     </div>
-    <input id="busqueda" placeholder="Escribí una palabra…" style="width:100%;max-width:600px" />
+    <input id="busqueda" placeholder="Escribí una palabra…" style="width:100%;padding:.5rem;font-size:1rem" />
   </div>
 
   <div id="dateContainer">
-    <div style="display:flex;gap:1rem;align-items:center;margin-bottom:1rem">
-      <label>Desde: <input type="month" id="desde" /></label>
-      <label>Hasta: <input type="month" id="hasta" /></label>
-    </div>
-    <div style="display:flex;gap:1rem;align-items:center">
-      <select id="orden">
-        <option value="desc">Más nuevos primero</option>
-        <option value="asc">Más antiguos primero</option>
-      </select>
-      <button id="botonBuscar">Buscar</button>
-    </div>
+    <label>Desde: <input type="month" id="desde" /></label>
+    <label>Hasta: <input type="month" id="hasta" /></label>
+    <select id="orden">
+      <option value="desc">Más nuevos primero</option>
+      <option value="asc">Más antiguos primero</option>
+    </select>
+    <button id="botonBuscar">Buscar</button>
   </div>
 
   <progress id="progressBar" max="1" value="0"></progress>
@@ -79,162 +48,158 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V0.1.35</div>
+  <div id="version">V0.1.36</div>
 
-  <script>
-    const ultimaDiv = document.getElementById('ultimaActualizacion');
-    const progressBar = document.getElementById('progressBar');
-    const statusDiv = document.getElementById('status');
-    const resultadosDiv = document.getElementById('resultados');
-    const input = document.getElementById('busqueda');
-    const contador = document.getElementById('contador');
-    const botonBuscar = document.getElementById('botonBuscar');
-    const pdfPreview = document.getElementById('pdfPreview');
+<script>
+  const ultimaDiv = document.getElementById('ultimaActualizacion');
+  const busquedaInput = document.getElementById('busqueda');
+  const botonBuscar = document.getElementById('botonBuscar');
+  const resultadosDiv = document.getElementById('resultados');
+  const pdfPreview = document.getElementById('pdfPreview');
+  const statusDiv = document.getElementById('status');
+  const contadorDiv = document.getElementById('contador');
+  const progressBar = document.getElementById('progressBar');
+  const desdeInput = document.getElementById('desde');
+  const hastaInput = document.getElementById('hasta');
+  const ordenSelect = document.getElementById('orden');
 
-    // Detectar cuántos chunks hay
-    async function detectChunks() {
-      let count = 0;
-      while (true) {
-        try {
-          const res = await fetch(`json_chunks/boletines_part_${count+1}.jsonl`, {method:'HEAD'});
-          if (!res.ok) break;
-          count++;
-        } catch { break; }
-      }
-      return count;
-    }
-
-    // Mostrar última actualización
-    async function mostrarUltimaActualizacion() {
-      const total = await detectChunks();
-      if (total === 0) {
-        ultimaDiv.textContent = 'Sin datos de boletines.';
-        return;
-      }
-      // Leer el último chunk
-      const text = await (await fetch(`json_chunks/boletines_part_${total}.jsonl`)).text();
-      const lines = text.trim().split('\n').filter(Boolean);
-      // Tomar la última línea válida
-      for (let i = lines.length-1; i>=0; i--) {
-        try {
-          const obj = JSON.parse(lines[i]);
-          const f = obj.archivo.substr(0,8),
-                num = (obj.archivo.match(/boletin-(\d+)/i)||[])[1]||'N/D',
-                fecha = `${f.slice(6)}/${f.slice(4,6)}/${f.slice(0,4)}`;
-          ultimaDiv.textContent = `Última actualización: Boletín N.º ${num} – ${fecha}`;
-          return;
-        } catch {}
-      }
-      ultimaDiv.textContent = 'Sin datos de actualización.';
-    }
-
-    // Función para mostrar PDF con fallback
-    async function cargarPDF(url) {
-      pdfPreview.innerHTML = '<p>Cargando vista previa…</p>';
-      const clean = url.split('#')[0];
-      // Intento directo
-      const direct = document.createElement('iframe');
-      direct.src = clean;
-      direct.style.cssText = 'width:100%;height:600px;border:none;';
-      let loaded = false;
-      direct.onload = () => loaded = true;
-      direct.onerror = () => {
-        if (!loaded) {
-          // Fallback a Google Docs Viewer
-          const g = document.createElement('iframe');
-          g.src = 'https://docs.google.com/gview?embedded=true&url='+encodeURIComponent(clean);
-          g.style.cssText = 'width:100%;height:600px;border:none;';
-          pdfPreview.innerHTML = '<h3>Modo compatibilidad</h3>';
-          pdfPreview.appendChild(g);
-        }
-      };
-      pdfPreview.innerHTML = '<h3>Vista previa del boletín</h3>';
-      pdfPreview.appendChild(direct);
-    }
-
-    // Búsqueda principal
-    async function realizarBusqueda() {
-      const q = input.value.trim();
-      if (!q) {
-        resultadosDiv.innerHTML = '<p>Ingresá una búsqueda.</p>';
-        return;
-      }
-      botonBuscar.disabled = true;
-      statusDiv.textContent = 'Buscando…';
-      resultadosDiv.innerHTML = '';
-      contador.textContent = '';
-      pdfPreview.innerHTML = '';
-      const total = await detectChunks();
-      progressBar.max = total||1;
-      let matches = [], regex;
-      const type = document.querySelector('input[name="searchType"]:checked').value;
+  // 1) Detectar chunks
+  async function detectChunks() {
+    let n = 0;
+    while(true) {
+      const url = `json_chunks/boletines_part_${n+1}.jsonl`;
       try {
-        regex = type==='endsWith'
-          ? new RegExp(q+'$', 'i')
-          : type==='or'
-            ? new RegExp(q.split('|').map(w=>w.trim()).join('|'),'i')
-            : new RegExp(q,'i');
-      } catch {
-        statusDiv.textContent = ''; botonBuscar.disabled=false;
-        resultadosDiv.innerHTML = '<p>Error en expresión.</p>'; return;
-      }
-      for (let i=1;i<=total;i++){
-        try {
-          const txt = await (await fetch(`json_chunks/boletines_part_${i}.jsonl`)).text();
-          for (let ln of txt.split('\n')) {
-            if (!ln) continue;
-            const obj = JSON.parse(ln);
-            if (regex.test(obj.fragmento)) matches.push(obj);
-          }
-        } catch {}
-        progressBar.value = i;
-      }
-      statusDiv.textContent=''; botonBuscar.disabled=false;
-      // Filtrado por fechas
-      const desde = document.getElementById('desde').value,
-            hasta = document.getElementById('hasta').value,
-            norm = v=>v.replace(/-/g,'')+'01';
-      matches = matches.filter(m=>{
-        const f=m.archivo.substr(0,8);
-        if(desde&&f<norm(desde))return false;
-        if(hasta&&f>norm(hasta))return false;
-        return true;
-      });
-      // Orden
-      const orden = document.getElementById('orden').value;
-      matches.sort((a,b)=>{
-        const fa=a.archivo.substr(0,8), fb=b.archivo.substr(0,8);
-        return orden==='asc'?fa.localeCompare(fb):fb.localeCompare(fa);
-      });
-      if (!matches.length) {
-        resultadosDiv.innerHTML='<p>No hay resultados.</p>';
-        contador.textContent='0 resultados.'; return;
-      }
-      contador.textContent=`${matches.length} resultado${matches.length>1?'s':''}.`;
-      // Cargar primero
-      const m0=matches[0];
-      cargarPDF(`https://quilmes.gov.ar/pdf/boletines/${m0.archivo.match(/boletin-(\\d+)/i)[1]}.pdf#page=${m0.pagina}`);
-      // Mostrar lista
-      for (let m of matches) {
-        const f=m.archivo.substr(0,8), a=f.slice(0,4), mes=f.slice(4,6),
-              mesN={'01':'enero','02':'feb','03':'marzo','04':'abril','05':'mayo','06':'junio','07':'julio','08':'ago','09':'sep','10':'oct','11':'nov','12':'dic'}[mes]||mes,
-              num=(m.archivo.match(/boletin-(\\d+)/i)||[])[1]||'N/A',
-              pg=m.pagina||1,
-              texto=`Boletín N.º ${num} – ${mesN} de ${a}`,
-              url=`https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${pg}`;
-        const div=document.createElement('div');
-        div.className='resultado';
-        div.innerHTML=`<div class="linea"><a href="${url}" target="_blank">${texto}</a> (p. ${pg})</div>
-                       <div class="fragmento">${m.fragmento.replace(regex,'<mark>$&</mark>')}</div>`;
-        div.onclick=()=>cargarPDF(url);
-        resultadosDiv.appendChild(div);
-      }
+        const res = await fetch(url, { method: 'HEAD' });
+        if (!res.ok) break;
+        n++;
+      } catch { break; }
     }
+    return n;
+  }
 
-    input.addEventListener('keydown',e=>{ if(e.key==='Enter') realizarBusqueda(); });
-    botonBuscar.addEventListener('click',realizarBusqueda);
+  // 2) Mostrar última actualización
+  async function mostrarUltimaActualizacion() {
+    const total = await detectChunks();
+    if (total === 0) {
+      ultimaDiv.textContent = 'Sin datos de actualización.';
+      return;
+    }
+    const chunk = await fetch(`json_chunks/boletines_part_${total}.jsonl`).then(r=>r.text());
+    const lines = chunk.trim().split('\n').filter(Boolean);
+    for (let i=lines.length-1; i>=0; i--) {
+      try {
+        const obj = JSON.parse(lines[i]);
+        const f = obj.archivo.slice(0,8);
+        const num = (obj.archivo.match(/boletin-(\d+)/)||[])[1]||'N/D';
+        const fecha = `${f.slice(6)}/${f.slice(4,6)}/${f.slice(0,4)}`;
+        ultimaDiv.textContent = `Última actualización: Boletín N.º ${num} – ${fecha}`;
+        return;
+      } catch {}
+    }
+    ultimaDiv.textContent = 'Sin datos de actualización.';
+  }
 
-    mostrarUltimaActualizacion();
-  </script>
+  // 3) Cargar PDF con fallback
+  async function cargarPDF(url) {
+    pdfPreview.innerHTML = '<p>Cargando PDF…</p>';
+    const clean = url.split('#')[0];
+    // Intento directo
+    const iframe = document.createElement('iframe');
+    iframe.src = clean;
+    iframe.onload = () => {}; 
+    iframe.onerror = () => {
+      // Fallback Google Docs Viewer
+      pdfPreview.innerHTML = `
+        <iframe src="https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(clean)}"></iframe>
+      `;
+    };
+    pdfPreview.innerHTML = '';
+    pdfPreview.appendChild(iframe);
+  }
+
+  // 4) Búsqueda
+  async function realizarBusqueda() {
+    const q = busquedaInput.value.trim();
+    if (!q) {
+      resultadosDiv.innerHTML = '<p>Ingresá texto para buscar.</p>';
+      return;
+    }
+    statusDiv.textContent = 'Buscando…';
+    resultadosDiv.innerHTML = '';
+    contadorDiv.textContent = '';
+    pdfPreview.innerHTML = '';
+    const total = await detectChunks();
+    progressBar.max = total||1;
+    let matches = [];
+    let regex;
+    const mode = document.querySelector('input[name="searchType"]:checked').value;
+    try {
+      if (mode==='endsWith') regex = new RegExp(q+'$','i');
+      else if (mode==='or') regex = new RegExp(q.split('|').join('|'),'i');
+      else regex = new RegExp(q,'i');
+    } catch(e){
+      statusDiv.textContent='Error regex';
+      return;
+    }
+    for (let i=1;i<=total;i++){
+      const text = await fetch(`json_chunks/boletines_part_${i}.jsonl`).then(r=>r.text());
+      for (let ln of text.split('\n')) {
+        if (!ln) continue;
+        try {
+          const obj = JSON.parse(ln);
+          if (regex.test(obj.fragmento)) matches.push(obj);
+        } catch{}
+      }
+      progressBar.value = i;
+    }
+    statusDiv.textContent = '';
+    // Fecha filter
+    const desde = desdeInput.value.replace(/-/g,'')+'01';
+    const hasta = hastaInput.value.replace(/-/g,'')+'01';
+    if (desdeInput.value) matches = matches.filter(m=>m.archivo.slice(0,8)>=desde);
+    if (hastaInput.value) matches = matches.filter(m=>m.archivo.slice(0,8)<=hasta);
+    // Sort
+    matches.sort((a,b)=>{
+      const da = a.archivo.slice(0,8), db=b.archivo.slice(0,8);
+      return ordenSelect.value==='asc'?da.localeCompare(db):db.localeCompare(da);
+    });
+    if (!matches.length) {
+      resultadosDiv.innerHTML='<p>No hay resultados.</p>';
+      contadorDiv.textContent='0 resultados';
+      return;
+    }
+    contadorDiv.textContent=`${matches.length} resultados`;
+    // Mostrar primer PDF
+    const first = matches[0];
+    const num = (first.archivo.match(/boletin-(\d+)/)||[])[1];
+    cargarPDF(`https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${first.pagina}`);
+    // Mostrar lista
+    matches.forEach(m=>{
+      const fechaRaw = m.archivo.slice(0,8),
+            anno = fechaRaw.slice(0,4),
+            mes = fechaRaw.slice(4,6),
+            meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'],
+            mesN = meses[parseInt(mes,10)-1]||mes,
+            num = (m.archivo.match(/boletin-(\d+)/)||[])[1],
+            pg = m.pagina;
+      const div = document.createElement('div');
+      div.className = 'resultado';
+      div.innerHTML = `
+        <div class="linea">
+          <a href="https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf" target="_blank">Boletín N.º ${num} – ${mesN} de ${anno}</a>
+          (p. ${pg})
+        </div>
+        <div class="fragmento">${m.fragmento.replace(regex,'<mark>$&</mark>')}</div>
+      `;
+      div.onclick = ()=> cargarPDF(`https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${pg}`);
+      resultadosDiv.appendChild(div);
+    });
+  }
+
+  botonBuscar.addEventListener('click', realizarBusqueda);
+  busquedaInput.addEventListener('keydown', e=>{ if(e.key==='Enter') realizarBusqueda(); });
+
+  mostrarUltimaActualizacion();
+</script>
 </body>
 </html>
