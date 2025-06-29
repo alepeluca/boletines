@@ -9,35 +9,28 @@
       font-family: sans-serif;
       margin: 2rem;
       max-width: 900px;
-      background: #f0f0f0; /* gris claro de fondo */
+      background: #f0f0f0;
     }
     input, select, input[type="month"] {
       padding: .5rem;
       font-size: 1rem;
     }
-    input[type="month"] {
-      width: 140px;
-    }
+    input[type="month"] { width: 140px; }
     #progressBar {
       width: 100%;
       height: 1.2rem;
-      display: none;
       margin: 1rem 0;
+      display: none;
     }
     .resultado {
       background: #fff;
-      border: 2px solid blue; /* borde azul */
+      border: 2px solid blue;
       padding: 1rem;
       margin: 1rem 0;
       border-radius: 6px;
     }
-    .linea {
-      font-weight: bold;
-      margin-bottom: .5rem;
-    }
-    .fragmento {
-      white-space: pre-wrap;
-    }
+    .linea { font-weight: bold; margin-bottom: .5rem; }
+    .fragmento { white-space: pre-wrap; }
   </style>
 </head>
 <body>
@@ -56,21 +49,30 @@
     <label>Hasta: <input type="month" id="hasta" /></label>
   </div>
 
-  <progress id="progressBar" max="100" value="0"></progress>
+  <progress id="progressBar" max="0" value="0"></progress>
   <div id="contador" style="margin-top:1rem; font-weight:bold;"></div>
   <div id="resultados"></div>
 
   <script>
-    // Número de chunks que tienes — incrementa esto cuando agregues más
-    const NUM_CHUNKS = 16;
-    const CHUNKS = Array.from({ length: NUM_CHUNKS }, (_, i) =>
-      `json_chunks/boletines_part_${i + 1}.jsonl`
-    );
-
     const progressBar = document.getElementById('progressBar');
     const resultadosDiv = document.getElementById('resultados');
     const input = document.getElementById('busqueda');
     const contador = document.getElementById('contador');
+
+    async function detectChunks() {
+      let count = 0;
+      while (true) {
+        const url = `json_chunks/boletines_part_${count+1}.jsonl`;
+        try {
+          const res = await fetch(url, { method: 'HEAD' });
+          if (!res.ok) break;
+          count++;
+        } catch {
+          break;
+        }
+      }
+      return count;
+    }
 
     input.addEventListener('keydown', async e => {
       if (e.key !== 'Enter') return;
@@ -82,23 +84,24 @@
       progressBar.style.display = 'block';
       progressBar.value = 0;
 
+      // Detectar dinámicamente número de chunks
+      const totalChunks = await detectChunks();
+      progressBar.max = totalChunks;
+
       let matches = [];
-      for (let i = 0; i < CHUNKS.length; i++) {
+      for (let i = 1; i <= totalChunks; i++) {
         try {
-          const text = await (await fetch(CHUNKS[i])).text();
+          const text = await (await fetch(`json_chunks/boletines_part_${i}.jsonl`)).text();
           for (let ln of text.split(/\r?\n/)) {
             if (!ln) continue;
             let obj;
             try { obj = JSON.parse(ln); } catch { continue; }
-            if (obj.fragmento.toLowerCase().includes(q)) {
-              matches.push(obj);
-            }
+            if (obj.fragmento.toLowerCase().includes(q)) matches.push(obj);
           }
         } catch (err) {
-          console.error('Error cargando', CHUNKS[i], err);
+          console.error('Error cargando chunk', i, err);
         }
-        // Actualizar barra de progreso
-        progressBar.value = Math.round(((i + 1) / NUM_CHUNKS) * 100);
+        progressBar.value = i;
       }
       progressBar.style.display = 'none';
 
@@ -107,7 +110,7 @@
       const hasta = document.getElementById("hasta").value;
       const norm = v => v.replace(/-/g, '') + '01';
       matches = matches.filter(m => {
-        const f = m.archivo.substring(0, 8);
+        const f = m.archivo.substring(0,8);
         if (desde && f < norm(desde)) return false;
         if (hasta && f > norm(hasta)) return false;
         return true;
@@ -115,9 +118,9 @@
 
       // Ordenar
       const orden = document.getElementById("orden").value;
-      matches.sort((a, b) => {
-        const fa = a.archivo.substring(0, 8), fb = b.archivo.substring(0, 8);
-        return orden === 'asc' ? fa.localeCompare(fb) : fb.localeCompare(fa);
+      matches.sort((a,b) => {
+        const fa = a.archivo.substring(0,8), fb = b.archivo.substring(0,8);
+        return orden==='asc' ? fa.localeCompare(fb) : fb.localeCompare(fa);
       });
 
       // Mostrar
@@ -126,7 +129,7 @@
         contador.textContent = '0 resultados encontrados.';
         return;
       }
-      contador.textContent = `${matches.length} resultado${matches.length !== 1 ? 's' : ''} encontrado${matches.length !== 1 ? 's' : ''}.`;
+      contador.textContent = `${matches.length} resultado${matches.length!==1?'s':''} encontrado${matches.length!==1?'s':''}.`;
       resultadosDiv.innerHTML = '';
 
       const meses = {
@@ -136,10 +139,10 @@
       };
 
       for (let m of matches) {
-        const fecha = m.archivo.substring(0, 8);
-        const anio = fecha.slice(0, 4);
-        const mesNombre = meses[fecha.slice(4, 6)] || fecha.slice(4, 6);
-        const num = (m.archivo.match(/boletin-(\d+)/i) || [])[1] || '';
+        const fecha = m.archivo.substring(0,8);
+        const anio = fecha.slice(0,4);
+        const mesNombre = meses[fecha.slice(4,6)] || fecha.slice(4,6);
+        const num = (m.archivo.match(/boletin-(\d+)/i)||[])[1]||'';
         const texto = `Boletín Oficial Municipal N.º ${num} – ${mesNombre} de ${anio}`;
         const urlPDF = `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf`;
 
@@ -151,7 +154,7 @@
           </div>
           <div class="fragmento">
             ${m.fragmento.replace(
-              new RegExp(q.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi'),
+              new RegExp(q.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&'), 'gi'),
               '<mark>$&</mark>'
             )}
           </div>
