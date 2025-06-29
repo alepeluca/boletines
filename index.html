@@ -164,15 +164,12 @@
 
     async function cargarPDF(url) {
       pdfPreview.innerHTML = '<p>Cargando vista previa...</p>';
-      const pdfDisponible = await verificarPDF(url);
-      if (pdfDisponible) {
-        pdfPreview.innerHTML = `
-          <h3>Vista previa del boletín</h3>
-          <iframe src="${url}" title="Vista previa del PDF" onerror="this.parentNode.innerHTML='<p class=error>No se pudo cargar el PDF: ${url}</p>'"></iframe>
-        `;
-      } else {
-        pdfPreview.innerHTML = `<p class="error">No se pudo cargar el PDF: ${url}</p>`;
-      }
+      const urlEscaped = encodeURIComponent(url);
+      const googleViewerUrl = `https://docs.google.com/gview?url=${urlEscaped}&embedded=true`;
+      pdfPreview.innerHTML = `
+        <h3>Vista previa del boletín</h3>
+        <iframe src="${googleViewerUrl}" title="Vista previa del PDF" style="width:100%; height:600px;" frameborder="0"></iframe>
+      `;
     }
 
     async function realizarBusqueda() {
