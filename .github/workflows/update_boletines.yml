@@ -1,40 +1,44 @@
-name: Actualizar boletines
+name: Actualizar Boletines
 
 on:
   schedule:
-    - cron: '0 8 * * *'  # Todos los días a las 8 AM UTC
-  workflow_dispatch:     # Permite ejecutarlo manualmente
+    - cron: '0 6 * * *'  # Todos los días a las 06:00 UTC
+  workflow_dispatch:    # Para correr manualmente si quieres
 
 jobs:
   actualizar:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clonar el repositorio
+      - name: Chequear repo
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Para poder pushear cambios luego
 
-      - name: Configurar Python
+      - name: Configurar Python 3.11
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
-          pip install requests PyMuPDF
+          pip install requests pymupdf
 
-      - name: Ejecutar el script de actualización
+      - name: Ejecutar update_boletines.py
         run: python scripts/update_boletines.py
 
-      - name: Confirmar cambios si los hay
+      - name: Configurar Git para push
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add json_chunks/*.jsonl
-          git add public/ultima_actualizacion.json || true
-          if git diff --cached --quiet; then
-            echo "No hay nuevos boletines para subir."
-          else
-            git commit -m "Actualización automática de boletines"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Detectar cambios y hacer push
+        run: |
+          if [[ `git status --porcelain` ]]; then
+            git add json_chunks/*.jsonl ultima_actualizacion.json
+            git commit -m "Actualización automática de boletines y última actualización"
             git push
+          else
+            echo "No hay cambios para subir."
           fi
