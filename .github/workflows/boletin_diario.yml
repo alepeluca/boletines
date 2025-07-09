@@ -1,0 +1,29 @@
+name: Procesar boletín diario
+
+on:
+  schedule:
+    - cron: "30 8 * * *"  # todos los días a las 8:30 UTC (~5:30 Argentina)
+  workflow_dispatch:  # permite ejecutarlo manualmente también
+
+jobs:
+  procesar-boletin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Clonar repo
+        uses: actions/checkout@v3
+
+      - name: 🐍 Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install pymupdf requests
+
+      - name: ⚙️ Ejecutar script
+        run: python procesar_boletin.py
+
+      - name: 🚀 Commit y push si hay cambios
+        run: |
+          git config user.name "boletin-bot"
+          git config user.email "bot@boletines.local"
+          git add json_chunks/*.jsonl
+          git diff --cached --quiet || git commit -m "🤖 Nuevo boletín procesado"
+          git push
