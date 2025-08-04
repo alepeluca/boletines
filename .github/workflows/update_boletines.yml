@@ -3,14 +3,17 @@ name: Actualizar boletines
 on:
   workflow_dispatch:
   schedule:
-    - cron: '30 10 * * 1-5'  # Corre de lunes a viernes a las 10:30 UTC
+    - cron: '30 10 * * 1-5'  # Corre de lunes a viernes a las 10:30 UTC (7:30 hora Argentina)
+
+permissions:
+  contents: write  # Permite hacer git push desde GitHub Actions
 
 jobs:
   update:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout del repositorio
         uses: actions/checkout@v3
 
       - name: Configurar Python
@@ -23,14 +26,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests tqdm PyMuPDF
 
-      - name: Ejecutar actualización
+      - name: Ejecutar actualización de boletines
         run: python scripts/update_boletines.py
 
-      - name: Subir cambios
+      - name: Subir cambios (si los hay)
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           git add .
-          git commit -m "Actualización automática de boletines"
-          git push
-        continue-on-error: true
+          if git diff --cached --quiet; then
+            echo "Sin cambios para subir."
+          else
+            git commit -m "Actualización automática de boletines"
+            git push
+          fi
