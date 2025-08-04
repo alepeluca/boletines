@@ -1,82 +1,135 @@
 import os
 import re
+import json
+from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 from PyPDF2 import PdfReader
 
-# URL base de los boletines municipales
+# Directorios y URLs
 BASE_URL = "https://quilmes.gov.ar/gobierno/boletin_oficial.php"
 PDF_BASE_URL = "https://quilmes.gov.ar/archivos/boletin-oficial/pdf/boletin-{}.pdf"
+PDF_DIR = "boletines"
+JSON_CHUNKS_DIR = "json_chunks"
 
-# Carpeta donde se guardan los boletines descargados
-CARPETA_BOLETINES = "boletines"
-os.makedirs(CARPETA_BOLETINES, exist_ok=True)
+os.makedirs(PDF_DIR, exist_ok=True)
+os.makedirs(JSON_CHUNKS_DIR, exist_ok=True)
 
-# Función para obtener el número del último boletín disponible en la web
-def obtener_ultimo_boletin():
+def obtener_ultimo_boletin_web():
     print("Obteniendo listado de boletines...")
     response = requests.get(BASE_URL)
     soup = BeautifulSoup(response.content, "html.parser")
 
-    # Buscar todos los links que coincidan con el patrón boletin-XXX.pdf
     links = soup.find_all("a", href=re.compile(r"boletin-\d+\.pdf"))
-    numeros = []
-    for link in links:
-        match = re.search(r"boletin-(\d+)\.pdf", link["href"])
-        if match:
-            numeros.append(int(match.group(1)))
-
+    numeros = [int(re.search(r"boletin-(\d+)\.pdf", a['href']).group(1)) for a in links]
     ultimo = max(numeros)
-    print(f"Último boletín encontrado en la web: {ultimo}")
+    print(f"Último boletín en la web: {ultimo}")
     return ultimo
 
-# Función para descargar un boletín PDF dado su número
+def obtener_ultimo_boletin_procesado():
+    # Buscar último archivo jsonl
+    archivos = list(Path(JSON_CHUNKS_DIR).glob("boletines_part_*.jsonl"))
+    if not archivos:
+        print("No hay archivos jsonl previos. Comenzando desde cero.")
+        return 0, 0  # último archivo número, último boletín procesado
+
+    # Obtener el número máximo de archivo jsonl
+    nums = [int(re.search(r"boletines_part_(\d+)\.jsonl", a.name).group(1)) for a in archivos]
+    ultimo_arch_num = max(nums)
+    ultimo_arch = JSON_CHUNKS_DIR + f"/boletines_part_{ultimo_arch_num}.jsonl"
+
+    print(f"Último archivo jsonl encontrado: {ultimo_arch}")
+
+    # Leer última línea del archivo para obtener último boletín procesado
+    with open(ultimo_arch, "rb") as f:
+        try:
+            f.seek(-2, os.SEEK_END)  # Ir casi al final
+            while f.read(1) != b"\n":
+                f.seek(-2, os.SEEK_CUR)
+        except OSError:
+            f.seek(0)
+        ultima_linea = f.readline().decode()
+    ultimo_boletin = json.loads(ultima_linea).get("id", "")
+    # El id es como "boletin-526_12345"
+    nro_match = re.search(r"boletin-(\d+)_", ultimo_boletin)
+    if nro_match:
+        ultimo_numero_boletin = int(nro_match.group(1))
+    else:
+        ultimo_numero_boletin = 0
+
+    print(f"Último boletín procesado: {ultimo_numero_boletin}")
+    return ultimo_arch_num, ultimo_numero_boletin
+
 def descargar_boletin(numero):
+    pdf_path = os.path.join(PDF_DIR, f"boletin-{numero}.pdf")
+    if os.path.exists(pdf_path):
+        print(f"boletin-{numero}.pdf ya existe. No se descarga.")
+        return pdf_path
     url = PDF_BASE_URL.format(numero)
-    ruta_archivo = os.path.join(CARPETA_BOLETINES, f"boletin-{numero}.pdf")
-    print(f"Descargando boletin-{numero}.pdf ...")
-    response = requests.get(url)
-    if response.status_code == 200:
-        with open(ruta_archivo, "wb") as f:
-            f.write(response.content)
-        return ruta_archivo
+    print(f"Descargando boletin-{numero}.pdf...")
+    r = requests.get(url)
+    if r.status_code == 200:
+        with open(pdf_path, "wb") as f:
+            f.write(r.content)
+        return pdf_path
     else:
         print(f"No se pudo descargar el boletín {numero}")
         return None
 
-# Función para extraer texto de un PDF y guardarlo como TXT
-def procesar_boletin(ruta_pdf):
-    numero = re.search(r"boletin-(\d+)\.pdf", ruta_pdf).group(1)
-    ruta_txt = os.path.join(CARPETA_BOLETINES, f"boletin-{numero}.txt")
-    print(f"Procesando texto de boletin-{numero}.pdf ...")
-    try:
-        reader = PdfReader(ruta_pdf)
-        texto = ""
-        for page in reader.pages:
-            texto += page.extract_text() + "\n"
+def pdf_a_fragmentos(pdf_path, fragment_size=500):
+    reader = PdfReader(pdf_path)
+    fragments = []
+    for i, page in enumerate(reader.pages):
+        text = page.extract_text() or ""
+        for j in range(0, len(text), fragment_size):
+            fragment = text[j:j+fragment_size].strip()
+            if fragment:
+                fragments.append({"pagina": i+1, "fragmento": fragment})
+    return fragments
 
-        with open(ruta_txt, "w", encoding="utf-8") as f:
-            f.write(texto)
-    except Exception as e:
-        print(f"Error al procesar el PDF: {e}")
+def generar_jsonl_chunk(nombre_chunk, boletines):
+    print(f"Generando {nombre_chunk} con {len(boletines)} boletines...")
+    idx = 0
+    with open(os.path.join(JSON_CHUNKS_DIR, nombre_chunk), "w", encoding="utf-8") as f:
+        for b in boletines:
+            archivo = b["archivo"]
+            for frag in b["fragmentos"]:
+                obj = {
+                    "id": f"{archivo}_{idx}",
+                    "archivo": archivo,
+                    "fragmento": frag["fragmento"],
+                    "pagina": frag["pagina"]
+                }
+                f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+                idx += 1
 
-# MAIN: Ejecutar el flujo
 def main():
-    ultimo = obtener_ultimo_boletin()
-    ruta_pdf = os.path.join(CARPETA_BOLETINES, f"boletin-{ultimo}.pdf")
+    ultimo_arch_num, ultimo_boletin_procesado = obtener_ultimo_boletin_procesado()
+    ultimo_boletin_web = obtener_ultimo_boletin_web()
 
-    # Si el PDF ya está en la carpeta, no lo descargamos de nuevo
-    if not os.path.exists(ruta_pdf):
-        ruta_pdf = descargar_boletin(ultimo)
-        if ruta_pdf:
-            procesar_boletin(ruta_pdf)
-    else:
-        print(f"El boletín-{ultimo}.pdf ya fue descargado. Revisando si falta el .txt...")
-        ruta_txt = ruta_pdf.replace(".pdf", ".txt")
-        if not os.path.exists(ruta_txt):
-            procesar_boletin(ruta_pdf)
-        else:
-            print("Ya está procesado.")
+    if ultimo_boletin_web <= ultimo_boletin_procesado:
+        print("No hay boletines nuevos para procesar.")
+        return
+
+    nuevos_boletines = []
+    for nro in range(ultimo_boletin_procesado + 1, ultimo_boletin_web + 1):
+        pdf_path = descargar_boletin(nro)
+        if not pdf_path:
+            continue
+        fragmentos = pdf_a_fragmentos(pdf_path)
+        nuevos_boletines.append({
+            "archivo": f"boletin-{nro}.txt",
+            "fragmentos": fragmentos
+        })
+
+    if not nuevos_boletines:
+        print("No se procesaron boletines nuevos.")
+        return
+
+    siguiente_num = ultimo_arch_num + 1
+    nombre_chunk = f"boletines_part_{siguiente_num}.jsonl"
+    generar_jsonl_chunk(nombre_chunk, nuevos_boletines)
+    print(f"Archivo generado: {nombre_chunk}")
 
 if __name__ == "__main__":
     main()
