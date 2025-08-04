@@ -1,178 +1,127 @@
-import json
 import os
 import re
+import json
 from pathlib import Path
 import requests
 from urllib.parse import urljoin, urlparse
-from bs4 import BeautifulSoup  # Para web scraping
-import fitz  # PyMuPDF para procesar PDFs
-from tqdm import tqdm  # Para barras de progreso
+from bs4 import BeautifulSoup
+import fitz  # PyMuPDF
+from tqdm import tqdm
 
-# Configuración de directorios y constantes
-CHUNKS_DIR = Path("json_chunks")  # Carpeta donde se guardan los chunks
-CHUNK_SIZE = 1000  # Tamaño de cada chunk (número de boletines por archivo)
-NEW_FILE_PATH = Path("nuevo_boletin.json")  # Ruta del nuevo boletín a agregar
-BASE_URL = "https://quilmes.gov.ar"  # URL base del sitio web
-BOLETINES_URL = f"{BASE_URL}/boletines"  # URL de la página con los boletines (ajustar si es necesario)
+# Configuración de rutas
+BASE_URL       = "https://quilmes.gov.ar"
+BOLETINES_URL  = f"{BASE_URL}/boletines"
+BOLETINES_DIR  = Path("boletines")
+CHUNKS_DIR     = Path("json_chunks")
+CHUNK_PATTERN  = re.compile(r"boletines_part_(\d+)\.jsonl")
+PDF_PATTERN    = re.compile(r"boletin-(\d+)\.pdf")
 
-def is_valid_url(url):
-    """Valida si una URL es correcta."""
-    try:
-        result = urlparse(url)
-        return all([result.scheme, result.netloc])
-    except ValueError:
-        return False
+def get_latest_chunk_number() -> int:
+    """Devuelve el mayor índice N de 'boletines_part_N.jsonl' en json_chunks/."""
+    CHUNKS_DIR.mkdir(exist_ok=True)
+    nums = [int(m.group(1)) for f in CHUNKS_DIR.iterdir() 
+            if (m := CHUNK_PATTERN.match(f.name))]
+    return max(nums, default=-1)
 
-def descarga_pdf(nro, url_rel):
-    """Descarga un archivo PDF desde una URL relativa y lo guarda localmente."""
-    # Construir la URL completa
-    pdf_url = urljoin(BASE_URL, url_rel.strip("/"))  # Evita barras dobles
-    if not is_valid_url(pdf_url):
-        print(f"Error: URL inválida: {pdf_url}")
-        return None
-
-    print(f"Descargando boletin-{nro}.pdf desde {pdf_url}...")
-    try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        r = requests.get(pdf_url, timeout=10, headers=headers)
-        r.raise_for_status()
-        pdf_dir = Path("boletines")
-        pdf_dir.mkdir(exist_ok=True)
-        pdf_path = pdf_dir / f"boletin-{nro}.pdf"
-        with open(pdf_path, "wb") as f:
-            f.write(r.content)
-        return str(pdf_path)
-    except requests.exceptions.RequestException as e:
-        print(f"Error al descargar {pdf_url}: {e}")
-        return None
+def get_last_boletin_number() -> int:
+    """Escanea todos los chunks y devuelve el mayor nro de boletín procesado."""
+    last = 0
+    for f in CHUNKS_DIR.glob("boletines_part_*.jsonl"):
+        with open(f, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    obj = json.loads(line)
+                    archivo = obj.get("archivo", "")
+                    if (m := PDF_PATTERN.search(archivo)):
+                        last = max(last, int(m.group(1)))
+                except json.JSONDecodeError:
+                    continue
+    return last
 
 def scrape_boletines():
-    """Obtiene la lista de boletines desde la página web."""
-    print("Obteniendo listado de boletines desde la web...")
-    try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        response = requests.get(BOLETINES_URL, headers=headers, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Suposición: los boletines están en enlaces <a> con URLs que contienen "boletin-N.pdf"
-        boletines = []
-        for link in soup.find_all("a", href=re.compile(r"boletin-\d+\.pdf")):
-            href = link.get("href")
-            nro_match = re.search(r"boletin-(\d+)\.pdf", href)
-            if nro_match:
-                nro = int(nro_match.group(1))
-                boletines.append({"nro": nro, "url": href})
-        
-        if not boletines:
-            print("Advertencia: No se encontraron boletines en la página.")
-            return []
-        
-        print(f"Total boletines encontrados en web: {len(boletines)} (del {min(b.nro for b in boletines)} al {max(b.nro for b in boletines)})")
-        return sorted(boletines, key=lambda x: x["nro"])
-    except requests.exceptions.RequestException as e:
-        print(f"Error al scrapear boletines: {e}")
-        return []
+    """Devuelve lista de {'nro': int, 'url': str} de los boletines en la web."""
+    resp = requests.get(BOLETINES_URL, timeout=10,
+                        headers={"User-Agent":"Mozilla/5.0"})
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    encontrados = []
+    for a in soup.find_all("a", href=PDF_PATTERN):
+        href = a["href"]
+        nro = int(PDF_PATTERN.search(href).group(1))
+        encontrados.append({"nro": nro, "url": href})
+    return sorted(encontrados, key=lambda b: b["nro"])
 
-def load_chunks():
-    """Carga y une todos los chunks existentes en orden (soporta JSONL)."""
-    all_data = []
-    chunk_files = sorted(
-        CHUNKS_DIR.glob("boletines_part_*.jsonl"),
-        key=lambda x: int(re.search(r"boletines_part_(\d+).jsonl", x.name).group(1))
-    )
-    for file in chunk_files:
-        with open(file, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip():
-                    all_data.append(json.loads(line.strip()))
-    print(f"Archivos JSONL en disco: {[f.name for f in chunk_files]}")
-    print(f"Último chunk #: {len(chunk_files) - 1}, último boletín procesado: {all_data[-1]['nro'] if all_data else 0}")
-    return all_data
-
-def load_new_boletin():
-    """Carga el nuevo boletín desde un archivo JSON."""
-    try:
-        with open(NEW_FILE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print(f"Error: No se encontró el archivo {NEW_FILE_PATH}")
-        return None
-    except json.JSONDecodeError as e:
-        print(f"Error: Formato JSON inválido en {NEW_FILE_PATH}: {e}")
+def descarga_pdf(nro: int, url_rel: str) -> Path | None:
+    """Descarga y guarda el PDF; retorna su Path o None."""
+    pdf_url = urljoin(BASE_URL, url_rel.lstrip("/"))
+    # validación mínima
+    parsed = urlparse(pdf_url)
+    if not parsed.scheme or not parsed.netloc:
+        print(f"[ERROR] URL inválida: {pdf_url}")
         return None
 
-def save_chunks(data):
-    """Divide y guarda los datos en archivos JSONL."""
-    CHUNKS_DIR.mkdir(exist_ok=True)
-    for old_file in CHUNKS_DIR.glob("boletines_part_*.jsonl"):
-        old_file.unlink()
-    
-    for i in range(0, len(data), CHUNK_SIZE):
-        chunk_data = data[i:i + CHUNK_SIZE]
-        chunk_path = CHUNKS_DIR / f"boletines_part_{i // CHUNK_SIZE}.jsonl"
-        with open(chunk_path, "w", encoding="utf-8") as f:
-            for item in chunk_data:
-                f.write(json.dumps(item, ensure_ascii=False) + "\n")
-
-def process_pdf(pdf_path):
-    """Procesa el PDF para extraer metadatos o contenido (ejemplo con PyMuPDF)."""
+    BOLETINES_DIR.mkdir(exist_ok=True)
+    salida = BOLETINES_DIR / f"boletin-{nro}.pdf"
     try:
-        with fitz.open(pdf_path) as doc:
-            metadata = doc.metadata
-            text = ""
-            for page in doc:
-                text += page.get_text()
-        return {"metadata": metadata, "text_length": len(text)}
+        r = requests.get(pdf_url, timeout=10,
+                         headers={"User-Agent":"Mozilla/5.0"})
+        r.raise_for_status()
+        with open(salida, "wb") as f:
+            f.write(r.content)
+        return salida
     except Exception as e:
-        print(f"Error al procesar PDF {pdf_path}: {e}")
+        print(f"[ERROR] al descargar {pdf_url}: {e}")
         return None
+
+def process_pdf_to_fragments(pdf_path: Path) -> list[dict]:
+    """Devuelve lista de fragments {id, archivo, pagina, fragmento}."""
+    fragments = []
+    with fitz.open(pdf_path) as doc:
+        for i, page in enumerate(doc, start=1):
+            text = page.get_text().strip()
+            frag = {
+                "id":   f"{pdf_path.stem}_p{i}_f0",
+                "archivo": pdf_path.name,
+                "pagina":  i,
+                "fragmento": text
+            }
+            fragments.append(frag)
+    return fragments
+
+def save_fragments(chunk_num: int, frags: list[dict]):
+    """Guarda los fragments en el archivo de chunk correspondiente."""
+    out = CHUNKS_DIR / f"boletines_part_{chunk_num:03}.jsonl"
+    with open(out, "w", encoding="utf-8") as f:
+        for frag in frags:
+            f.write(json.dumps(frag, ensure_ascii=False) + "\n")
+    print(f"[OK] {len(frags)} fragmentos guardados en {out.name}")
 
 def main():
-    """Función principal para procesar y actualizar los boletines."""
-    print("Cargando chunks existentes...")
-    all_boletines = load_chunks()
-    
-    print("Cargando nuevo boletín...")
-    new_boletin = load_new_boletin()
-    if new_boletin is None:
-        print("Error: No se pudo cargar el nuevo boletín. Continuando con web scraping...")
-    
-    # Scrapear boletines desde la web
+    print("🔍 Detectando estado actual…")
+    latest_chunk  = get_latest_chunk_number()
+    last_boletin  = get_last_boletin_number()
+    print(f"    Último chunk: {latest_chunk}")
+    print(f"    Último boletín procesado: {last_boletin}")
+
+    print("🌐 Scrapeando boletines en la web…")
     web_boletines = scrape_boletines()
-    
-    # Filtrar boletines nuevos (no presentes en los chunks existentes)
-    existing_nros = {b["nro"] for b in all_boletines}
-    new_web_boletines = [b for b in web_boletines if b["nro"] not in existing_nros]
-    
-    # Descargar y procesar PDFs
-    for boletin in tqdm(new_web_boletines, desc="Procesando boletines"):
-        pdf_path = descarga_pdf(boletin["nro"], boletin["url"])
-        if pdf_path:
-            boletin["pdf_path"] = pdf_path
-            pdf_info = process_pdf(pdf_path)
-            if pdf_info:
-                boletin.update(pdf_info)
-            all_boletines.append(boletin)
-    
-    # Agregar el nuevo boletín del archivo JSON, si existe
-    if new_boletin:
-        nro = new_boletin.get("nro", "unknown")
-        url_rel = new_boletin.get("url", "")
-        if url_rel:
-            pdf_path = descarga_pdf(nro, url_rel)
-            if pdf_path:
-                new_boletin["pdf_path"] = pdf_path
-                pdf_info = process_pdf(pdf_path)
-                if pdf_info:
-                    new_boletin.update(pdf_info)
-        all_boletines.append(new_boletin)
-    
-    print("Repartiendo boletines en chunks...")
-    save_chunks(all_boletines)
-    
-    print("Proceso completado. Total de boletines ahora:", len(all_boletines))
+    pendientes    = [b for b in web_boletines if b["nro"] > last_boletin]
+
+    if not pendientes:
+        print("✅ No hay boletines nuevos.")
+        return
+
+    siguiente = pendientes[0]
+    print(f"⬇️  Nuevo boletín detectado: {siguiente['nro']} → descargando…")
+    pdf_path = descarga_pdf(siguiente["nro"], siguiente["url"])
+    if not pdf_path:
+        return
+
+    print("📄 Procesando PDF a fragmentos…")
+    frags = process_pdf_to_fragments(pdf_path)
+
+    print(f"💾 Guardando como chunk #{latest_chunk+1}…")
+    save_fragments(latest_chunk+1, frags)
 
 if __name__ == "__main__":
-    CHUNKS_DIR.mkdir(exist_ok=True)
     main()
