@@ -1,40 +1,61 @@
 import json
 import os
+import re
 from pathlib import Path
 
-# Configuración de paths
-chunks_dir = Path("json_chunks")
-boletin_nuevo_path = Path("nuevo_boletin.json")
+# Carpeta donde están los chunks
+CHUNKS_DIR = Path("json_chunks")
+CHUNK_SIZE = 1000
 
-# Validaciones
-if not boletin_nuevo_path.exists():
-    raise FileNotFoundError("No se encontró el archivo 'nuevo_boletin.json'.")
+# Ruta del archivo nuevo (editá según donde tengas el nuevo boletín)
+NEW_FILE_PATH = Path("nuevo_boletin.json")
 
-# Leer el boletín nuevo
-with open(boletin_nuevo_path, "r", encoding="utf-8") as f:
-    boletin_nuevo = json.load(f)
+def load_chunks():
+    """Carga y une todos los chunks existentes en orden."""
+    all_data = []
+    chunk_files = sorted(
+        CHUNKS_DIR.glob("chunk_*.json"),
+        key=lambda x: int(re.search(r"chunk_(\d+).json", x.name).group(1))
+    )
+    for file in chunk_files:
+        with open(file, "r", encoding="utf-8") as f:
+            chunk = json.load(f)
+            all_data.extend(chunk)
+    return all_data
 
-# Verificar estructura esperada
-if not isinstance(boletin_nuevo, list):
-    raise ValueError("El archivo 'nuevo_boletin.json' debe contener una lista de entradas.")
+def load_new_boletin():
+    """Carga el nuevo boletín desde un archivo JSON."""
+    with open(NEW_FILE_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-# Obtener el número del chunk más alto existente
-chunk_files = sorted(chunks_dir.glob("chunk_*.json"))
-ultimo_numero = -1
-for file in chunk_files:
-    try:
-        numero = int(file.stem.split("_")[1])
-        if numero > ultimo_numero:
-            ultimo_numero = numero
-    except (IndexError, ValueError):
-        continue
+def save_chunks(data):
+    """Divide y guarda los datos en archivos chunk_N.json."""
+    # Eliminar archivos antiguos
+    for old_file in CHUNKS_DIR.glob("chunk_*.json"):
+        old_file.unlink()
 
-nuevo_numero = ultimo_numero + 1
-nuevo_nombre = f"chunk_{nuevo_numero:03}.json"
-nuevo_path = chunks_dir / nuevo_nombre
+    # Guardar nuevos chunks
+    for i in range(0, len(data), CHUNK_SIZE):
+        chunk_data = data[i:i + CHUNK_SIZE]
+        chunk_path = CHUNKS_DIR / f"chunk_{i // CHUNK_SIZE}.json"
+        with open(chunk_path, "w", encoding="utf-8") as f:
+            json.dump(chunk_data, f, indent=2, ensure_ascii=False)
 
-# Guardar el nuevo chunk
-with open(nuevo_path, "w", encoding="utf-8") as f:
-    json.dump(boletin_nuevo, f, ensure_ascii=False, indent=2)
+def main():
+    print("Cargando chunks existentes...")
+    all_boletines = load_chunks()
+    print(f"Total de boletines existentes: {len(all_boletines)}")
 
-print(f"✅ Nuevo chunk creado: {nuevo_nombre} con {len(boletin_nuevo)} registros.")
+    print("Cargando nuevo boletín...")
+    new_boletin = load_new_boletin()
+
+    print("Agregando nuevo boletín...")
+    all_boletines.append(new_boletin)
+
+    print("Repartiendo boletines en chunks...")
+    save_chunks(all_boletines)
+
+    print("Proceso completado. Total de boletines ahora:", len(all_boletines))
+
+if __name__ == "__main__":
+    main()
