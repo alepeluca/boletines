@@ -17,7 +17,8 @@ JSON_CHUNKS_DIR = REPO_ROOT / "json_chunks"
 
 LISTADO_URL     = "https://quilmes.gov.ar/institucional/gobierno_abierto_boletines.php"
 BASE_URL        = "https://quilmes.gov.ar"
-PDF_PATH_TMPL   = "../pdf/boletines/boletin-{}.pdf"  # como aparece en href
+# Patrón relativo a href en el HTML
+PDF_PATH_PATTERN = r'(\.\./pdf/boletines/boletin-(\d+)\.pdf)'
 
 # Tamaño de cada fragmento de texto
 FRAGMENT_SIZE = 1000
@@ -33,16 +34,15 @@ JSON_CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
 # ------------------------------------------------------------
 def detecta_ultimo_procesado():
     archivos = sorted(JSON_CHUNKS_DIR.glob("boletines_part_*.jsonl"))
-    print("Archivos JSONL en disco:", [f.name for f in archivos])
+    print("DEBUG: Archivos JSONL encontrados:", [f.name for f in archivos])
 
     if not archivos:
         return 0, 0
 
-    # Tomamos el que tenga el número más alto en su nombre
     ultimo_arch = archivos[-1]
     nro_chunk = int(re.search(r"boletines_part_(\d+)\.jsonl", ultimo_arch.name).group(1))
 
-    # Leemos su última línea para extraer el último boletín procesado
+    # Leer la última línea del archivo
     with open(ultimo_arch, "rb") as f:
         try:
             f.seek(-2, os.SEEK_END)
@@ -53,15 +53,14 @@ def detecta_ultimo_procesado():
         ultima_linea = f.readline().decode("utf-8")
 
     data = json.loads(ultima_linea)
-    # Su id viene como "boletin-525_1234"
     match = re.match(r"boletin-(\d+)_", data["id"])
     ultimo_boletin = int(match.group(1)) if match else 0
 
-    print(f"Último chunk #: {nro_chunk}, último boletín procesado: {ultimo_boletin}")
+    print(f"DEBUG: Último chunk = {nro_chunk}, último boletín procesado = {ultimo_boletin}")
     return nro_chunk, ultimo_boletin
 
 # ------------------------------------------------------------
-# 2) Leer la web y determinar el boletín mayor disponible
+# 2) Leer la web y determinar todos los boletines disponibles
 # ------------------------------------------------------------
 def obtiene_lista_boletines_web():
     print("Obteniendo listado de boletines desde la web...")
@@ -69,15 +68,14 @@ def obtiene_lista_boletines_web():
     r.raise_for_status()
     html = r.text
 
-    # Extraemos href="../pdf/boletines/boletin-XXX.pdf"
-    matches = re.findall(r'href="(\.\./pdf/boletines/boletin-(\d+)\.pdf)"', html)
+    matches = re.findall(PDF_PATH_PATTERN, html)
     boletines = [(int(n), url) for url, n in matches]
     boletines = sorted(set(boletines), key=lambda x: x[0])
-    print(f"Total boletines encontrados en web: {len(boletines)} (del {boletines[0][0]} al {boletines[-1][0]})")
+    print(f"Total en web: {len(boletines)} (del {boletines[0][0]} al {boletines[-1][0]})")
     return boletines
 
 # ------------------------------------------------------------
-# 3) Por cada boletín nuevo, descargar PDF y extraer fragmentos
+# 3) Descargar y fragmentar cada PDF nuevo
 # ------------------------------------------------------------
 def descarga_pdf(nro, url_rel):
     pdf_url = BASE_URL + url_rel
@@ -103,12 +101,12 @@ def pdf_a_fragmentos(pdf_path):
     return fragments
 
 # ------------------------------------------------------------
-# 4) Generar el JSONL chunk con los nuevos boletines
+# 4) Generar el nuevo chunk JSONL
 # ------------------------------------------------------------
 def generar_chunk(nro_chunk, boletines_data):
     nombre = f"boletines_part_{nro_chunk}.jsonl"
     dest = JSON_CHUNKS_DIR / nombre
-    print(f"Generando {nombre} con {len(boletines_data)} boletines…")
+    print(f"Generando {nombre} con {len(boletines_data)} boletines …")
     idx = 0
     with open(dest, "w", encoding="utf-8") as f:
         for b in boletines_data:
@@ -129,7 +127,6 @@ def main():
     chunk_num, ultimo_proc = detecta_ultimo_procesado()
     lista_web = obtiene_lista_boletines_web()
 
-    # Filtramos solo los boletines > último_proc
     nuevos = [(n, url) for (n, url) in lista_web if n > ultimo_proc]
     if not nuevos:
         print("No hay boletines nuevos para procesar. 💤")
