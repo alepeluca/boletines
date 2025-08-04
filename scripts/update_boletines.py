@@ -1,135 +1,151 @@
+#!/usr/bin/env python3
 import os
 import re
 import json
 from pathlib import Path
 import requests
-from bs4 import BeautifulSoup
-from PyPDF2 import PdfReader
+import fitz  # PyMuPDF
 
-# Directorios y URLs
-BASE_URL = "https://quilmes.gov.ar/gobierno/boletin_oficial.php"
-PDF_BASE_URL = "https://quilmes.gov.ar/archivos/boletin-oficial/pdf/boletin-{}.pdf"
-PDF_DIR = "boletines"
-JSON_CHUNKS_DIR = "json_chunks"
+# ------------------------------------------------------------
+# RUTAS Y CONSTANTES
+# ------------------------------------------------------------
+# Base del repo: dos niveles arriba de este script
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
-os.makedirs(PDF_DIR, exist_ok=True)
-os.makedirs(JSON_CHUNKS_DIR, exist_ok=True)
+PDF_DIR         = REPO_ROOT / "pdfs"
+JSON_CHUNKS_DIR = REPO_ROOT / "json_chunks"
 
-def obtener_ultimo_boletin_web():
-    print("Obteniendo listado de boletines...")
-    response = requests.get(BASE_URL)
-    soup = BeautifulSoup(response.content, "html.parser")
+LISTADO_URL     = "https://quilmes.gov.ar/institucional/gobierno_abierto_boletines.php"
+BASE_URL        = "https://quilmes.gov.ar"
+PDF_PATH_TMPL   = "../pdf/boletines/boletin-{}.pdf"  # como aparece en href
 
-    links = soup.find_all("a", href=re.compile(r"boletin-\d+\.pdf"))
-    numeros = [int(re.search(r"boletin-(\d+)\.pdf", a['href']).group(1)) for a in links]
-    ultimo = max(numeros)
-    print(f"Último boletín en la web: {ultimo}")
-    return ultimo
+# Tamaño de cada fragmento de texto
+FRAGMENT_SIZE = 1000
 
-def obtener_ultimo_boletin_procesado():
-    # Buscar último archivo jsonl
-    archivos = list(Path(JSON_CHUNKS_DIR).glob("boletines_part_*.jsonl"))
+# ------------------------------------------------------------
+# Asegura que existan directorios
+# ------------------------------------------------------------
+PDF_DIR.mkdir(parents=True, exist_ok=True)
+JSON_CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
+
+# ------------------------------------------------------------
+# 1) Detectar el último JSONL procesado y extraer su mayor boletín
+# ------------------------------------------------------------
+def detecta_ultimo_procesado():
+    archivos = sorted(JSON_CHUNKS_DIR.glob("boletines_part_*.jsonl"))
+    print("Archivos JSONL en disco:", [f.name for f in archivos])
+
     if not archivos:
-        print("No hay archivos jsonl previos. Comenzando desde cero.")
-        return 0, 0  # último archivo número, último boletín procesado
+        return 0, 0
 
-    # Obtener el número máximo de archivo jsonl
-    nums = [int(re.search(r"boletines_part_(\d+)\.jsonl", a.name).group(1)) for a in archivos]
-    ultimo_arch_num = max(nums)
-    ultimo_arch = JSON_CHUNKS_DIR + f"/boletines_part_{ultimo_arch_num}.jsonl"
+    # Tomamos el que tenga el número más alto en su nombre
+    ultimo_arch = archivos[-1]
+    nro_chunk = int(re.search(r"boletines_part_(\d+)\.jsonl", ultimo_arch.name).group(1))
 
-    print(f"Último archivo jsonl encontrado: {ultimo_arch}")
-
-    # Leer última línea del archivo para obtener último boletín procesado
+    # Leemos su última línea para extraer el último boletín procesado
     with open(ultimo_arch, "rb") as f:
         try:
-            f.seek(-2, os.SEEK_END)  # Ir casi al final
+            f.seek(-2, os.SEEK_END)
             while f.read(1) != b"\n":
                 f.seek(-2, os.SEEK_CUR)
         except OSError:
             f.seek(0)
-        ultima_linea = f.readline().decode()
-    ultimo_boletin = json.loads(ultima_linea).get("id", "")
-    # El id es como "boletin-526_12345"
-    nro_match = re.search(r"boletin-(\d+)_", ultimo_boletin)
-    if nro_match:
-        ultimo_numero_boletin = int(nro_match.group(1))
-    else:
-        ultimo_numero_boletin = 0
+        ultima_linea = f.readline().decode("utf-8")
 
-    print(f"Último boletín procesado: {ultimo_numero_boletin}")
-    return ultimo_arch_num, ultimo_numero_boletin
+    data = json.loads(ultima_linea)
+    # Su id viene como "boletin-525_1234"
+    match = re.match(r"boletin-(\d+)_", data["id"])
+    ultimo_boletin = int(match.group(1)) if match else 0
 
-def descargar_boletin(numero):
-    pdf_path = os.path.join(PDF_DIR, f"boletin-{numero}.pdf")
-    if os.path.exists(pdf_path):
-        print(f"boletin-{numero}.pdf ya existe. No se descarga.")
-        return pdf_path
-    url = PDF_BASE_URL.format(numero)
-    print(f"Descargando boletin-{numero}.pdf...")
-    r = requests.get(url)
-    if r.status_code == 200:
-        with open(pdf_path, "wb") as f:
-            f.write(r.content)
-        return pdf_path
-    else:
-        print(f"No se pudo descargar el boletín {numero}")
-        return None
+    print(f"Último chunk #: {nro_chunk}, último boletín procesado: {ultimo_boletin}")
+    return nro_chunk, ultimo_boletin
 
-def pdf_a_fragmentos(pdf_path, fragment_size=500):
-    reader = PdfReader(pdf_path)
+# ------------------------------------------------------------
+# 2) Leer la web y determinar el boletín mayor disponible
+# ------------------------------------------------------------
+def obtiene_lista_boletines_web():
+    print("Obteniendo listado de boletines desde la web...")
+    r = requests.get(LISTADO_URL)
+    r.raise_for_status()
+    html = r.text
+
+    # Extraemos href="../pdf/boletines/boletin-XXX.pdf"
+    matches = re.findall(r'href="(\.\./pdf/boletines/boletin-(\d+)\.pdf)"', html)
+    boletines = [(int(n), url) for url, n in matches]
+    boletines = sorted(set(boletines), key=lambda x: x[0])
+    print(f"Total boletines encontrados en web: {len(boletines)} (del {boletines[0][0]} al {boletines[-1][0]})")
+    return boletines
+
+# ------------------------------------------------------------
+# 3) Por cada boletín nuevo, descargar PDF y extraer fragmentos
+# ------------------------------------------------------------
+def descarga_pdf(nro, url_rel):
+    pdf_url = BASE_URL + url_rel
+    destino = PDF_DIR / f"boletin-{nro}.pdf"
+    if destino.exists():
+        print(f"  • boletin-{nro}.pdf ya existe, salteando descarga.")
+        return destino
+    print(f"  • Descargando boletin-{nro}.pdf …")
+    r = requests.get(pdf_url)
+    r.raise_for_status()
+    destino.write_bytes(r.content)
+    return destino
+
+def pdf_a_fragmentos(pdf_path):
+    doc = fitz.open(str(pdf_path))
     fragments = []
-    for i, page in enumerate(reader.pages):
-        text = page.extract_text() or ""
-        for j in range(0, len(text), fragment_size):
-            fragment = text[j:j+fragment_size].strip()
-            if fragment:
-                fragments.append({"pagina": i+1, "fragmento": fragment})
+    for p in range(doc.page_count):
+        text = doc.load_page(p).get_text("text")
+        for i in range(0, len(text), FRAGMENT_SIZE):
+            frag = text[i : i + FRAGMENT_SIZE].strip()
+            if frag:
+                fragments.append({"pagina": p + 1, "fragmento": frag})
     return fragments
 
-def generar_jsonl_chunk(nombre_chunk, boletines):
-    print(f"Generando {nombre_chunk} con {len(boletines)} boletines...")
+# ------------------------------------------------------------
+# 4) Generar el JSONL chunk con los nuevos boletines
+# ------------------------------------------------------------
+def generar_chunk(nro_chunk, boletines_data):
+    nombre = f"boletines_part_{nro_chunk}.jsonl"
+    dest = JSON_CHUNKS_DIR / nombre
+    print(f"Generando {nombre} con {len(boletines_data)} boletines…")
     idx = 0
-    with open(os.path.join(JSON_CHUNKS_DIR, nombre_chunk), "w", encoding="utf-8") as f:
-        for b in boletines:
-            archivo = b["archivo"]
+    with open(dest, "w", encoding="utf-8") as f:
+        for b in boletines_data:
             for frag in b["fragmentos"]:
                 obj = {
-                    "id": f"{archivo}_{idx}",
-                    "archivo": archivo,
-                    "fragmento": frag["fragmento"],
-                    "pagina": frag["pagina"]
+                    "id":      f"{b['archivo']}_{idx}",
+                    "archivo": b["archivo"],
+                    "pagina":  frag["pagina"],
+                    "fragmento": frag["fragmento"]
                 }
                 f.write(json.dumps(obj, ensure_ascii=False) + "\n")
                 idx += 1
 
+# ------------------------------------------------------------
+# MAIN
+# ------------------------------------------------------------
 def main():
-    ultimo_arch_num, ultimo_boletin_procesado = obtener_ultimo_boletin_procesado()
-    ultimo_boletin_web = obtener_ultimo_boletin_web()
+    chunk_num, ultimo_proc = detecta_ultimo_procesado()
+    lista_web = obtiene_lista_boletines_web()
 
-    if ultimo_boletin_web <= ultimo_boletin_procesado:
-        print("No hay boletines nuevos para procesar.")
+    # Filtramos solo los boletines > último_proc
+    nuevos = [(n, url) for (n, url) in lista_web if n > ultimo_proc]
+    if not nuevos:
+        print("No hay boletines nuevos para procesar. 💤")
         return
 
-    nuevos_boletines = []
-    for nro in range(ultimo_boletin_procesado + 1, ultimo_boletin_web + 1):
-        pdf_path = descargar_boletin(nro)
-        if not pdf_path:
-            continue
-        fragmentos = pdf_a_fragmentos(pdf_path)
-        nuevos_boletines.append({
+    boletines_data = []
+    for nro, url_rel in nuevos:
+        pdf_path = descarga_pdf(nro, url_rel)
+        frags = pdf_a_fragmentos(pdf_path)
+        boletines_data.append({
             "archivo": f"boletin-{nro}.txt",
-            "fragmentos": fragmentos
+            "fragmentos": frags
         })
 
-    if not nuevos_boletines:
-        print("No se procesaron boletines nuevos.")
-        return
-
-    siguiente_num = ultimo_arch_num + 1
-    nombre_chunk = f"boletines_part_{siguiente_num}.jsonl"
-    generar_jsonl_chunk(nombre_chunk, nuevos_boletines)
-    print(f"Archivo generado: {nombre_chunk}")
+    generar_chunk(chunk_num + 1, boletines_data)
+    print("¡Listo! ✅")
 
 if __name__ == "__main__":
     main()
