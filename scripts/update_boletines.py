@@ -1,19 +1,10 @@
-"""
-update_boletines.py -
-Actualiza el archivo boletines.jsonl unificando todos los jsonl de la carpeta json_chunks,
-evitando duplicados según el campo "id" y ordenando por fecha.
-"""
-
 import os
+import re
 import json
-from datetime import datetime
 
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 CHUNKS_DIR = "json_chunks"
 OUTPUT_FILE = "boletines.jsonl"
-
-print("Versión del script: ", VERSION)
-
 
 def cargar_boletines_desde_archivo(ruta):
     boletines = []
@@ -37,17 +28,6 @@ def obtener_boletines_de_chunks():
         boletines += cargar_boletines_desde_archivo(ruta)
     return boletines
 
-def normalizar_fecha(boletin):
-    fecha_str = boletin.get("fecha", "")
-    formatos = ["%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d"]
-    for formato in formatos:
-        try:
-            return datetime.strptime(fecha_str, formato)
-        except ValueError:
-            continue
-    print(f"[WARN] Fecha inválida o ausente en boletín ID {boletin.get('id')}: {fecha_str}")
-    return datetime.min
-
 def unificar_boletines(boletines):
     unificados = {}
     for b in boletines:
@@ -58,25 +38,41 @@ def unificar_boletines(boletines):
         if b_id not in unificados:
             unificados[b_id] = b
         else:
-            # Si hay conflicto de datos, se puede ajustar esta lógica
+            # Podés modificar esta lógica para manejo de duplicados
             unificados[b_id] = b
     return list(unificados.values())
 
-def guardar_boletines(boletines, ruta):
-    with open(ruta, "w", encoding="utf-8") as f:
-        for b in boletines:
-            f.write(json.dumps(b, ensure_ascii=False) + "\n")
-    print(f"[OK] Se guardaron {len(boletines)} boletines únicos en {ruta}")
-
 def main():
-    print(f"== update_boletines.py (versión {VERSION}) ==")
+    print(f"Versión del script: {VERSION}")
+
+    print("Cargando boletines existentes...")
     existentes = cargar_boletines_desde_archivo(OUTPUT_FILE)
+
+    print("Cargando boletines desde chunks...")
     nuevos = obtener_boletines_de_chunks()
-    todos = existentes + nuevos
-    unificados = unificar_boletines(todos)
-    unificados.sort(key=normalizar_fecha, reverse=True)
-    guardar_boletines(unificados, OUTPUT_FILE)
+
+    all_data = existentes + nuevos
+
+    # Último nro seguro (evita KeyError)
+    last_boletin = next(
+        (item['nro'] for item in reversed(all_data) if isinstance(item, dict) and 'nro' in item),
+        "Desconocido"
+    )
+
+    print(f"Archivos JSONL en disco: {sorted(os.listdir(CHUNKS_DIR))}")
+    print(f"Último boletín procesado (nro): {last_boletin}")
+
+    unificados = unificar_boletines(all_data)
+
+    # Opcional: ordenar por nro o fecha, según tengas campo
+    unificados.sort(key=lambda x: x.get("nro", 0), reverse=True)
+
+    print(f"Guardando {len(unificados)} boletines unificados en {OUTPUT_FILE}...")
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        for b in unificados:
+            f.write(json.dumps(b, ensure_ascii=False) + "\n")
+
+    print("Proceso completado con éxito.")
 
 if __name__ == "__main__":
     main()
-
