@@ -1,30 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-update_boletines.py — Versión 1.0.9
+update_boletines.py — Versión 1.0.10
 
-1. Lee el directorio json_chunks/ y detecta el archivo boletines_part_N.jsonl con N más alto.
-2. De ese archivo extrae el último “id” y determina el número de boletín procesado (ej. 525).
+1. Lee json_chunks/ y detecta el boletines_part_N.jsonl con N más alto.
+2. Extrae de ese archivo el último número de boletín (ej. 525).
 3. Calcula NBOL = último + 1 (526).
-4. Scrapea https://quilmes.gov.ar/institucional/gobierno_abierto_boletines.php  
-   — extrae, junto al enlace, la fecha que aparece como “dd.MM.yy” antes del link.
-5. Descarga el PDF https://quilmes.gov.ar/pdf/boletines/boletin-NBOL.pdf.
-6. Procesa cada página del PDF en objetos {id, archivo, página, fragmento}, usando la fecha formateada “aaaammdd”:
-     - renombra el PDF a “aaaammdd - boletin-NBOL.pdf”
-     - genera IDs como “aaaammdd - boletin-NBOL.pdf_pX_f0”
-7. Guarda esos objetos en json_chunks/boletines_part_(N+1).jsonl
+4. Scrapea la web:
+     - Encuentra todos los <a href="...boletin-XXX.pdf">
+     - Toma el texto completo de su contenedor (parent), que incluye “25.07.25Boletín…”
+     - Extrae la fecha “dd.MM.yy” y la convierte a “YYYYMMDD”.
+5. Descarga https://quilmes.gov.ar/pdf/boletines/boletin-NBOL.pdf.
+6. Procesa cada página en {id, archivo, página, fragmento}, renombrando el PDF a
+     “YYYYMMDD - boletin-NBOL.pdf”.
+7. Guarda en json_chunks/boletines_part_(N+1).jsonl.
 """
 
-import os
-import re
-import json
-import requests
-import fitz  # PyMuPDF
+import os, re, json, requests, fitz
 from bs4 import BeautifulSoup
 from pathlib import Path
 from urllib.parse import urljoin
 
-VERSION = "1.0.9"
+VERSION = "1.0.10"
 JSON_CHUNKS_DIR = Path("json_chunks")
 PDF_DIR         = Path("pdfs")
 LIST_URL        = "https://quilmes.gov.ar/institucional/gobierno_abierto_boletines.php"
@@ -38,33 +35,30 @@ def find_latest_chunk_index():
     nums  = [int(re.search(r"boletines_part_(\d+)\.jsonl", f).group(1)) for f in files]
     return max(nums) if nums else -1
 
-def load_last_boletin_number(chunk_idx):
-    if chunk_idx < 0:
-        return 0
-    path = JSON_CHUNKS_DIR / f"boletines_part_{chunk_idx}.jsonl"
+def load_last_boletin_number(idx):
+    if idx < 0: return 0
+    path = JSON_CHUNKS_DIR / f"boletines_part_{idx}.jsonl"
     last_id = None
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            obj = json.loads(line)
-            last_id = obj.get("id", last_id)
-    if not last_id:
-        return 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        obj = json.loads(line)
+        last_id = obj.get("id", last_id)
+    if not last_id: return 0
     m = re.search(r"boletin-(\d+)\.pdf", last_id)
     return int(m.group(1)) if m else 0
 
 def scrape_boletines_list():
-    """Devuelve dict[nro] = {"url": href, "fecha": "aaaammdd"}"""
+    print("[INFO] Scrapeando lista de boletines en la web...")
     r = requests.get(LIST_URL, timeout=10)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
     result = {}
-    entries = soup.find_all("a", href=re.compile(r"boletin-\d+\.pdf"))
-    for a in entries:
+    for a in soup.find_all("a", href=re.compile(r"boletin-\d+\.pdf")):
         href = a["href"]
         nro = int(re.search(r"boletin-(\d+)\.pdf", href).group(1))
-        # buscar fecha en el texto previo
-        text = a.find_previous(text=True)
-        m = re.search(r"(\d{2})\.(\d{2})\.(\d{2})", text or "")
+        container = a.parent  # toma todo el texto del contenedor
+        raw = container.get_text(separator=" ", strip=True)
+        # Buscar fecha dd.MM.yy
+        m = re.search(r"(\d{2})\.(\d{2})\.(\d{2})", raw)
         if not m:
             continue
         d, mo, y2 = m.groups()
@@ -79,58 +73,51 @@ def download_pdf(nro):
     print(f"[INFO] Descargando {url}")
     r = requests.get(url, timeout=15)
     r.raise_for_status()
-    with open(dest, "wb") as f:
-        f.write(r.content)
+    dest.write_bytes(r.content)
     return dest
 
 def pdf_to_fragments(pdf_path: Path, fecha: str):
     print(f"[INFO] Procesando PDF {pdf_path.name}")
     doc = fitz.open(pdf_path)
-    # renombrar con fecha
     new_name = f"{fecha} - {pdf_path.name}"
     new_path = pdf_path.parent / new_name
     os.replace(pdf_path, new_path)
 
-    fragments = []
+    frags = []
     for i, page in enumerate(doc, start=1):
         text = page.get_text().strip()
-        fragments.append({
+        frags.append({
             "id":      f"{new_name}_p{i}_f0",
             "archivo": new_name,
             "pagina":  i,
             "fragmento": text
         })
-    return fragments
+    return frags
 
-def save_new_chunk(idx: int, frags: list):
+def save_new_chunk(idx: int, fragments: list):
     out = JSON_CHUNKS_DIR / f"boletines_part_{idx}.jsonl"
-    print(f"[INFO] Guardando chunk {out.name} con {len(frags)} fragments")
+    print(f"[INFO] Guardando chunk {out.name} ({len(fragments)} fragmentos)")
     with open(out, "w", encoding="utf-8") as f:
-        for frag in frags:
+        for frag in fragments:
             f.write(json.dumps(frag, ensure_ascii=False) + "\n")
 
 def main():
-    # 1–3
     last_idx   = find_latest_chunk_index()
     last_bolet = load_last_boletin_number(last_idx)
     print(f"[INFO] Último chunk: {last_idx}, último boletín: {last_bolet}")
 
-    # 4–5
     next_bolet = last_bolet + 1
     disponibles = scrape_boletines_list()
     if next_bolet not in disponibles:
         print(f"[INFO] Boletín {next_bolet} no disponible aún.")
         return
 
-    info = disponibles[next_bolet]
-    pdf_path = download_pdf(next_bolet)
+    info    = disponibles[next_bolet]
+    pdf     = download_pdf(next_bolet)
+    frags   = pdf_to_fragments(pdf, info["fecha"])
+    save_new_chunk(last_idx + 1, frags)
 
-    # 6
-    fragments = pdf_to_fragments(pdf_path, info["fecha"])
-
-    # 7
-    save_new_chunk(last_idx + 1, fragments)
-    print(f"[OK] Se generó boletines_part_{last_idx+1}.jsonl")
+    print(f"[OK] Se generó json_chunks/boletines_part_{last_idx+1}.jsonl")
 
 if __name__ == "__main__":
     main()
