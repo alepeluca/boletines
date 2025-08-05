@@ -16,7 +16,14 @@ jobs:
       - name: Checkout del repositorio
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Trae todo el historial para permitir pull/rebase
+          fetch-depth: 0  # Necesario para poder hacer pull/rebase
+
+      - name: Sincronizar con main remoto
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git reset --hard          # Limpia cualquier cambio local
+          git pull --rebase origin main
 
       - name: Configurar Python
         uses: actions/setup-python@v4
@@ -28,21 +35,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests tqdm PyMuPDF beautifulsoup4
 
-      - name: Ejecutar actualización de boletines
+      - name: Ejecutar actualización de boletines (v1.0.9)
         run: python scripts/update_boletines.py
-
-      - name: Sincronizar cambios remotos
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git pull --rebase origin main
 
       - name: Subir cambios (si los hay)
         run: |
-          git add json_chunks boletines.jsonl pdfs
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add json_chunks pdfs boletines.jsonl
           if git diff --cached --quiet; then
             echo "Sin cambios para subir."
           else
-            git commit -m "Actualización automática de boletines v1.0.8"
-            git push
+            git commit -m "Actualización automática de boletines v1.0.9"
+            git push origin main
           fi
