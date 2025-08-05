@@ -1,76 +1,78 @@
-import json
+"""
+update_boletines.py - Versión 1.0.2
+Actualiza el archivo boletines.jsonl unificando todos los jsonl de la carpeta json_chunks,
+evitando duplicados según el campo "id" y ordenando por fecha.
+"""
+
 import os
-import glob
+import json
+from datetime import datetime
 
-CHUNKS_FOLDER = "data/chunks"
-NUEVOS_BOLETINES_PATH = "data/boletines_nuevos.jsonl"
+VERSION = "1.0.2"
+CHUNKS_DIR = "json_chunks"
+OUTPUT_FILE = "boletines.jsonl"
 
-def load_chunks():
-    all_data = []
-    chunk_files = sorted(glob.glob(f"{CHUNKS_FOLDER}/boletines_part_*.jsonl"))
-
-    for file in chunk_files:
-        with open(file, "r", encoding="utf-8") as f:
-            for line in f:
+def cargar_boletines_desde_archivo(ruta):
+    boletines = []
+    if os.path.exists(ruta):
+        with open(ruta, "r", encoding="utf-8") as f:
+            for linea in f:
                 try:
-                    item = json.loads(line.strip())
-                    if isinstance(item, dict) and "nro" in item:
-                        all_data.append(item)
-                except json.JSONDecodeError:
-                    continue  # Ignorar líneas inválidas
+                    boletines.append(json.loads(linea))
+                except json.JSONDecodeError as e:
+                    print(f"Error decodificando JSON en {ruta}: {e}")
+    return boletines
 
-    if not all_data:
-        print("No se encontraron datos válidos en los chunks.")
-        return all_data
+def obtener_boletines_de_chunks():
+    boletines = []
+    archivos = sorted([
+        f for f in os.listdir(CHUNKS_DIR) if f.endswith(".jsonl")
+    ])
+    print(f"[INFO] Archivos encontrados en {CHUNKS_DIR}: {archivos}")
+    for archivo in archivos:
+        ruta = os.path.join(CHUNKS_DIR, archivo)
+        boletines += cargar_boletines_desde_archivo(ruta)
+    return boletines
 
-    all_data.sort(key=lambda x: x["nro"])  # Asegura orden por nro
-    print(f"Último chunk #: {len(chunk_files) - 1}, último boletín procesado: {all_data[-1]['nro']}")
-    return all_data
+def normalizar_fecha(boletin):
+    fecha_str = boletin.get("fecha", "")
+    formatos = ["%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d"]
+    for formato in formatos:
+        try:
+            return datetime.strptime(fecha_str, formato)
+        except ValueError:
+            continue
+    print(f"[WARN] Fecha inválida o ausente en boletín ID {boletin.get('id')}: {fecha_str}")
+    return datetime.min
 
-def load_nuevos_boletines():
-    nuevos = []
-    with open(NUEVOS_BOLETINES_PATH, "r", encoding="utf-8") as f:
-        for line in f:
-            try:
-                item = json.loads(line.strip())
-                if isinstance(item, dict) and "nro" in item:
-                    nuevos.append(item)
-            except json.JSONDecodeError:
-                continue  # Ignorar líneas inválidas
+def unificar_boletines(boletines):
+    unificados = {}
+    for b in boletines:
+        b_id = b.get("id")
+        if not b_id:
+            print(f"[WARN] Boletín sin ID: {b}")
+            continue
+        if b_id not in unificados:
+            unificados[b_id] = b
+        else:
+            # Si hay conflicto de datos, se puede ajustar esta lógica
+            unificados[b_id] = b
+    return list(unificados.values())
 
-    return nuevos
-
-def save_chunks(data):
-    chunk_size = 100
-    os.makedirs(CHUNKS_FOLDER, exist_ok=True)
-
-    for i in range(0, len(data), chunk_size):
-        chunk = data[i:i+chunk_size]
-        chunk_file = os.path.join(CHUNKS_FOLDER, f"boletines_part_{i//chunk_size + 1}.jsonl")
-        with open(chunk_file, "w", encoding="utf-8") as f:
-            for item in chunk:
-                f.write(json.dumps(item, ensure_ascii=False) + "\n")
+def guardar_boletines(boletines, ruta):
+    with open(ruta, "w", encoding="utf-8") as f:
+        for b in boletines:
+            f.write(json.dumps(b, ensure_ascii=False) + "\n")
+    print(f"[OK] Se guardaron {len(boletines)} boletines únicos en {ruta}")
 
 def main():
-    actuales = load_chunks()
-    nuevos = load_nuevos_boletines()
-
-    if not nuevos:
-        print("No se encontraron nuevos boletines válidos.")
-        return
-
-    nro_actuales = {item["nro"] for item in actuales}
-    nuevos_unicos = [b for b in nuevos if b["nro"] not in nro_actuales]
-
-    if not nuevos_unicos:
-        print("No hay boletines nuevos para agregar.")
-        return
-
-    print(f"Agregando {len(nuevos_unicos)} boletines nuevos.")
-    todos = actuales + nuevos_unicos
-    todos.sort(key=lambda x: x["nro"])
-    save_chunks(todos)
-    print("Actualización completada.")
+    print(f"== update_boletines.py (versión {VERSION}) ==")
+    existentes = cargar_boletines_desde_archivo(OUTPUT_FILE)
+    nuevos = obtener_boletines_de_chunks()
+    todos = existentes + nuevos
+    unificados = unificar_boletines(todos)
+    unificados.sort(key=normalizar_fecha, reverse=True)
+    guardar_boletines(unificados, OUTPUT_FILE)
 
 if __name__ == "__main__":
     main()
