@@ -1,5 +1,5 @@
 """
-update_boletines.py - Versión 1.0.2
+update_boletines.py -
 Actualiza el archivo boletines.jsonl unificando todos los jsonl de la carpeta json_chunks,
 evitando duplicados según el campo "id" y ordenando por fecha.
 """
@@ -11,6 +11,9 @@ from datetime import datetime
 VERSION = "1.0.2"
 CHUNKS_DIR = "json_chunks"
 OUTPUT_FILE = "boletines.jsonl"
+
+print("Versión del script: ", VERSION)
+
 
 def cargar_boletines_desde_archivo(ruta):
     boletines = []
@@ -76,3 +79,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
