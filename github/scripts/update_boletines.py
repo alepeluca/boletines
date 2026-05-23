@@ -25,7 +25,8 @@ def generar_id(nombre, pagina):
 # Procesar los nuevos
 for pdf_url in pdfs:
     nombre = pdf_url.split("/")[-1]
-    numero = re.search(r"boletin-(\d+)", nombre)
+    # [-_] acepta cualquiera de los dos caracteres en esa posición
+    numero = re.search(r"boletin[-_](\d+)", nombre)
     if not numero:
         continue
     numero = int(numero.group(1))
