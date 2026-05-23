@@ -15,7 +15,7 @@ jobs:
       - name: 📥 Clonar repo
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Descarga todo el historial necesario para hacer el pull/rebase
+          fetch-depth: 0  # Descarga todo el historial necesario para resolver diferencias
 
       - name: 🐍 Instalar dependencias
         run: |
@@ -32,7 +32,7 @@ jobs:
           git config user.name "boletin-bot"
           git config user.email "bot@boletines.local"
           
-          # Autentica a Git para que pueda hacer tanto pull como push sin restricciones
+          # Autentica a Git para operaciones remotas
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@://github.com{{ github.repository }}.git
           
           git add json_chunks/*.jsonl
@@ -41,6 +41,9 @@ jobs:
             echo "Sin cambios para subir."
           else
             git commit -m "🤖 Nuevo boletín procesado"
-            git pull --rebase origin main  # Sincroniza de forma segura antes de enviar
+            
+            # Trae lo de la web, pero si hay conflicto con los JSON, GANA LO QUE CREÓ EL BOT
+            git pull --rebase -X theirs origin main
+            
             git push origin main
           fi
