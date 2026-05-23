@@ -13,9 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Clonar repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # 👈 ACTUALIZADO: Elimina el aviso de Node.js 20 desactualizado
         with:
-          fetch-depth: 0  # Descarga todo el historial necesario para resolver diferencias
+          fetch-depth: 0
 
       - name: 🐍 Instalar dependencias
         run: |
@@ -32,18 +32,20 @@ jobs:
           git config user.name "boletin-bot"
           git config user.email "bot@boletines.local"
           
-          # Autentica a Git para operaciones remotas
+          # Autentica de forma segura antes de cualquier operación
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@://github.com{{ github.repository }}.git
           
+          # 1. Agregamos los archivos generados
           git add json_chunks/*.jsonl
           
+          # 2. Obligamos a Git a actualizarse primero contra la web pase lo que pase
+          git fetch origin main
+          git merge origin/main -X theirs --allow-unrelated-histories -m "Sincronización previa" || true
+          
+          # 3. Verificamos si realmente hay cosas nuevas para commitear
           if git diff --cached --quiet; then
             echo "Sin cambios para subir."
           else
             git commit -m "🤖 Nuevo boletín procesado"
-            
-            # Trae lo de la web, pero si hay conflicto con los JSON, GANA LO QUE CREÓ EL BOT
-            git pull --rebase -X theirs origin main
-            
             git push origin main
           fi
