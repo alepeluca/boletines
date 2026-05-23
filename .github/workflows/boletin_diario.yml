@@ -1,4 +1,4 @@
-name: Procesar boletín diario
+name: Procesar boletín diario V2
 
 on:
   schedule:
@@ -26,5 +26,5 @@ jobs:
       - name: 🚀 Guardar cambios en la web
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "🤖 Nuevo boletín procesado"
+          commit_message: "🤖 Nuevo boletín procesado automáticamente"
           file_pattern: "json_chunks/*.jsonl"
