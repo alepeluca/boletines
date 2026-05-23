@@ -6,7 +6,7 @@ on:
   workflow_dispatch:  # permite ejecutarlo manualmente también
 
 permissions:
-  contents: write  # Permite al bot escribir y hacer push en el repo
+  contents: write  # Permite al bot guardar los archivos en el repo
 
 jobs:
   procesar-boletin:
@@ -14,8 +14,6 @@ jobs:
     steps:
       - name: 📥 Clonar repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: 🐍 Instalar dependencias
         run: |
@@ -25,27 +23,8 @@ jobs:
       - name: ⚙️ Ejecutar script
         run: python procesar_boletin.py
 
-      - name: 🚀 Commit y push si hay cambios
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name "boletin-bot"
-          git config user.email "bot@boletines.local"
-          
-          # URL CORREGIDA: Ahora Git se puede autenticar correctamente contra internet
-          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@://github.com{{ github.repository }}.git"
-          
-          # 1. Agregamos los archivos generados
-          git add json_chunks/*.jsonl
-          
-          # 2. Traemos lo de la web y resolvemos conflictos priorizando al bot
-          git fetch origin main
-          git merge origin/main -X theirs --allow-unrelated-histories -m "🤖 Sincronización automática previa" || true
-          
-          # 3. Verificamos si quedaron cosas nuevas listas para subir
-          if git diff --cached --quiet; then
-            echo "Sin cambios para subir."
-          else
-            git commit -m "🤖 Nuevo boletín procesado"
-            git push origin main
-          fi
+      - name: 🚀 Guardar cambios en la web
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "🤖 Nuevo boletín procesado"
+          file_pattern: "json_chunks/*.jsonl"
