@@ -6,7 +6,7 @@ on:
   workflow_dispatch:  # permite ejecutarlo manualmente también
 
 permissions:
-  contents: write  # 👈 AGREGADO: Permite al bot escribir y hacer push en el repo
+  contents: write  # Permite al bot escribir y hacer push en el repo
 
 jobs:
   procesar-boletin:
@@ -15,7 +15,7 @@ jobs:
       - name: 📥 Clonar repo
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # 👈 AGREGADO: Descarga todo el historial necesario para hacer el pull/rebase
+          fetch-depth: 0  # Descarga todo el historial necesario para hacer el pull/rebase
 
       - name: 🐍 Instalar dependencias
         run: |
@@ -26,15 +26,21 @@ jobs:
         run: python procesar_boletin.py
 
       - name: 🚀 Commit y push si hay cambios
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "boletin-bot"
           git config user.email "bot@boletines.local"
+          
+          # Autentica a Git para que pueda hacer tanto pull como push sin restricciones
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@://github.com{{ github.repository }}.git
+          
           git add json_chunks/*.jsonl
           
           if git diff --cached --quiet; then
             echo "Sin cambios para subir."
           else
             git commit -m "🤖 Nuevo boletín procesado"
-            git pull --rebase origin main  # 👈 AGREGADO: Trae lo nuevo de la web antes de mandar el push
+            git pull --rebase origin main  # Sincroniza de forma segura antes de enviar
             git push origin main
           fi
