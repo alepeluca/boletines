@@ -5,12 +5,17 @@ on:
     - cron: "30 8 * * *"  # todos los días a las 8:30 UTC (~5:30 Argentina)
   workflow_dispatch:  # permite ejecutarlo manualmente también
 
+permissions:
+  contents: write  # 👈 AGREGADO: Permite al bot escribir y hacer push en el repo
+
 jobs:
   procesar-boletin:
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Clonar repo
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # 👈 AGREGADO: Descarga todo el historial necesario para hacer el pull/rebase
 
       - name: 🐍 Instalar dependencias
         run: |
@@ -25,5 +30,11 @@ jobs:
           git config user.name "boletin-bot"
           git config user.email "bot@boletines.local"
           git add json_chunks/*.jsonl
-          git diff --cached --quiet || git commit -m "🤖 Nuevo boletín procesado"
-          git push
+          
+          if git diff --cached --quiet; then
+            echo "Sin cambios para subir."
+          else
+            git commit -m "🤖 Nuevo boletín procesado"
+            git pull --rebase origin main  # 👈 AGREGADO: Trae lo nuevo de la web antes de mandar el push
+            git push origin main
+          fi
