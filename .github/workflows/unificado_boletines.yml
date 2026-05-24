@@ -1,15 +1,15 @@
-name: Automatización General de Boletines
+name: Sistema Unificado Boletines 2026
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '30 10 * * 1-5'  # De lunes a viernes a las 10:30 UTC (7:30 AM hora Argentina)
+    - cron: '30 10 * * 1-5'  # De lunes a viernes a las 7:30 AM hora Argentina
 
 permissions:
-  contents: write  # Permite al bot guardar los archivos en el repo
+  contents: write
 
 jobs:
-  procesar-y-actualizar:
+  ejecutar-todo:
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Clonar repo
@@ -25,11 +25,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests tqdm PyMuPDF beautifulsoup4
 
-      - name: ⚙️ Ejecutar Sistema Unificado de Boletines
-        run: python procesar_boletin.py
+      - name: ⚙️ Ejecutar Script Único
+        run: python ejecutador_unico.py  # 👈 LLAMA DIRECTO AL NUEVO
 
-      - name: 🚀 Guardar todos los cambios en la web
+      - name: 🚀 Guardar cambios en la web
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "🤖 Procesamiento automático de boletines (Fase 1 y Fase 2)"
-          file_pattern: "json_chunks/* pdfs/*"
+          commit_message: "🤖 Actualización automática de chunks"
+          file_pattern: "json_chunks/*"
