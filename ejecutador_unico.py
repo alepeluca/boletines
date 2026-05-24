@@ -1,6 +1,4 @@
-# ejecutador_unico.py
 
-```python
 import re
 import json
 import tempfile
