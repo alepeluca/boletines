@@ -1,45 +1,96 @@
 name: Sistema Unificado Boletines 2026
 
 on:
+
   workflow_dispatch:
 
   schedule:
+    # 07:30 Argentina (UTC-3)
     - cron: '30 10 * * 1-5'
 
 permissions:
   contents: write
 
 jobs:
+
   ejecutar:
 
     runs-on: ubuntu-latest
 
     steps:
 
+      # =====================================================
+      # CHECKOUT
+      # =====================================================
+
       - name: 📥 Clonar repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # =====================================================
+      # PYTHON
+      # =====================================================
 
       - name: 🐍 Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # =====================================================
+      # DEPENDENCIAS
+      # =====================================================
+
       - name: 📦 Instalar dependencias
         run: |
           python -m pip install --upgrade pip
-          pip install requests PyMuPDF
+          pip install requests PyMuPDF beautifulsoup4
 
-      - name: ⚙️ Ejecutar script
-        run: python ejecutador_unico.py
+      # =====================================================
+      # DEBUG INICIAL
+      # =====================================================
 
-      - name: 🔎 Ver cambios
-        id: verify-changed-files
+      - name: 🔎 Verificar chunks existentes
         run: |
-          git diff --quiet . || echo "changed=true" >> $GITHUB_OUTPUT
+          echo "===== JSON CHUNKS ====="
+          ls -lah json_chunks | tail -20 || true
 
-      - name: 🚀 Commit automático
-        if: steps.verify-changed-files.outputs.changed == 'true'
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "🤖 Actualización automática de boletines"
-          file_pattern: "json_chunks/*.jsonl"
+      # =====================================================
+      # EJECUCIÓN
+      # =====================================================
+
+      - name: ⚙️ Ejecutar update_boletines.py
+        run: |
+          python update_boletines.py
+
+      # =====================================================
+      # DEBUG FINAL
+      # =====================================================
+
+      - name: 🔎 Verificar nuevos archivos
+        run: |
+          echo "===== STATUS ====="
+          git status
+
+          echo ""
+          echo "===== ÚLTIMOS CHUNKS ====="
+          ls -lah json_chunks | tail -20 || true
+
+      # =====================================================
+      # COMMIT
+      # =====================================================
+
+      - name: 🚀 Commit y push automático
+        run: |
+
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+          git add json_chunks/*.jsonl
+
+          if git diff --cached --quiet; then
+            echo "✅ No hay cambios para commitear."
+          else
+            git commit -m "🤖 Actualización automática de boletines"
+            git push
+          fi
