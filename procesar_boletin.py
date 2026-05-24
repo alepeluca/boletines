@@ -22,14 +22,27 @@ def get_latest_boletin_number():
 
 
 def descargar_pdf(numero):
-    url = f"{PDF_BASE_URL}boletin-{numero}.pdf"
-    response = requests.get(url)
+    # 1. Intentamos primero con la estructura tradicional de guion medio
+    url_guion = f"{PDF_BASE_URL}boletin-{numero}.pdf"
+    response = requests.get(url_guion)
+    
     if response.status_code == 200:
         path = f"boletin-{numero}.pdf"
         with open(path, "wb") as f:
             f.write(response.content)
-        return path
-    return None
+        return path, f"boletin-{numero}.pdf" # Devolvemos el path y el nombre real
+
+    # 2. Si falló, probamos con la estructura alternativa de guion bajo
+    url_bajo = f"{PDF_BASE_URL}boletin_{numero}.pdf"
+    response = requests.get(url_bajo)
+    
+    if response.status_code == 200:
+        path = f"boletin_{numero}.pdf"
+        with open(path, "wb") as f:
+            f.write(response.content)
+        return path, f"boletin_{numero}.pdf" # Devolvemos el path y el nombre real con guion bajo
+        
+    return None, None
 
 
 def extraer_texto(path_pdf):
@@ -61,19 +74,19 @@ def guardar_chunks_jsonl(chunks, numero, archivo_pdf):
 def main():
     ultimo = get_latest_boletin_number()
     siguiente = ultimo + 1
-    nombre_pdf = f"boletin-{siguiente}.pdf"
 
-    print(f"🔍 Buscando {nombre_pdf}...")
-    pdf_path = descargar_pdf(siguiente)
+    print(f"🔍 Buscando boletín número {siguiente}...")
+    # Ahora descargar_pdf nos da el archivo físico y cómo se llama realmente en la web
+    pdf_path, nombre_real_pdf = descargar_pdf(siguiente)
 
     if not pdf_path:
         print("📭 No hay boletín nuevo disponible.")
         return
 
-    print(f"📥 Descargado {pdf_path}")
+    print(f"📥 Descargado con éxito: {nombre_real_pdf}")
     texto = extraer_texto(pdf_path)
     chunks = dividir_en_chunks(texto, CHUNK_SIZE)
-    guardar_chunks_jsonl(chunks, siguiente, nombre_pdf)
+    guardar_chunks_jsonl(chunks, siguiente, nombre_real_pdf)
 
     os.remove(pdf_path)  # limpieza opcional
 
