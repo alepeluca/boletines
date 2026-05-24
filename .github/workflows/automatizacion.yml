@@ -1,0 +1,35 @@
+name: Sistema Unificado Boletines 2026
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 10 * * 1-5'  # De lunes a viernes a las 7:30 AM hora Argentina
+
+permissions:
+  contents: write
+
+jobs:
+  ejecutar-todo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Clonar repo
+        uses: actions/checkout@v4
+
+      - name: 🐍 Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: 📦 Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests tqdm PyMuPDF beautifulsoup4
+
+      - name: ⚙️ Ejecutar Script Único
+        run: python ejecutador_unico.py  # 👈 LLAMA DIRECTO AL NUEVO
+
+      - name: 🚀 Guardar cambios en la web
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "🤖 Actualización automática de chunks"
+          file_pattern: "json_chunks/*"
