@@ -1,4 +1,4 @@
-# procesar_boletin.py
+# ejecutador_unico.py
 import os
 import re
 import json
@@ -6,149 +6,161 @@ import requests
 import fitz  # PyMuPDF
 from pathlib import Path
 
-print("🚀 Iniciando Sistema Unificado de Boletines...")
+# --- SECCIÓN DE CONTROL DE VERSIONES ---
+VERSION = "v2.1.0"
+FECHA_MODIFICACION = "23-05-2026"
+print(f"=========================================================")
+print(f"🚀 SISTEMA UNIFICADO DE BOLETINES - Versión: {VERSION}")
+print(f"📅 Última actualización de código: {FECHA_MODIFICACION}")
+print(f"=========================================================\n")
 
 CHUNKS_DIR = Path("json_chunks")
-CHUNKS_DIR.mkdir(exist_ok=True)
 
-DOMINIO_BASE = "https://quilmes.gov.ar"
-PAGINA_BOLETINES = "https://quilmes.gov.ar"
-CHUNK_SIZE = 1200
+print("🚀 Iniciando Sistema Unificado de Boletines...")
 
-def get_latest_boletin_number():
-    archivos = os.listdir(CHUNKS_DIR)
-    numeros = [
-        int(re.search(r'boletines_part_(\d+)\.jsonl', f).group(1))
-        for f in archivos if re.match(r'boletines_part_\d+\.jsonl', f)
-    ]
+json_folder = Path("json_chunks")
+json_folder.mkdir(exist_ok=True)
+
+dominio_base = "https://quilmes.gov.ar"
+pagina_boletines = "https://quilmes.gov.ar/institucional/gobierno_abierto_boletines.php"
+
+def extraer_maximo_numero_real():
+    """Inspecciona los nombres de archivos jsonl para encontrar el boletín más alto."""
+    archivos = list(json_folder.glob("*.jsonl"))
+    numeros = []
+    for f in archivos:
+        match = re.search(r"boletines_part_(\d+)\.jsonl", f.name)
+        if match:
+            numeros.append(int(match.group(1)))
     return max(numeros) if numeros else 500
 
 def generar_id(nombre, pagina):
     return f"{nombre}_{pagina}"
 
-def procesar_y_guardar_pdf(full_url, nombre_pdf, numero_boletin):
-    json_nombre = f"boletines_part_{numero_boletin}.jsonl"
-    json_path = CHUNKS_DIR / json_nombre
-    
-    print(f"   📥 Descargando desde: {full_url}")
-    r = requests.get(full_url)
+def procesar_pdf_a_jsonl(url_descarga, nombre_archivo, ruta_salida_json):
+    """Descarga un PDF, extrae su contenido y escribe el archivo jsonl correspondiente."""
+    print(f"   📥 Descargando desde: {url_descarga}")
+    r = requests.get(url_descarga)
     r.raise_for_status()
     
-    temp_path = "temp.pdf"
-    with open(temp_path, "wb") as f:
+    with open("temp.pdf", "wb") as f:
         f.write(r.content)
 
-    print(f"   📄 Extrayendo texto y guardando en {json_nombre}...")
-    doc = fitz.open(temp_path)
-    paginas_procesadas = 0
+    doc = fitz.open("temp.pdf")
+    paginas_con_texto = 0
     
-    with open(json_path, "w", encoding="utf8") as out:
+    with open(ruta_salida_json, "w", encoding="utf8") as out:
         for page_num, page in enumerate(doc):
             texto = page.get_text().strip()
             if texto:
                 fragmento = {
-                    "id": generar_id(nombre_pdf, page_num),
-                    "archivo": nombre_pdf,
+                    "id": generar_id(nombre_archivo, page_num),
+                    "archivo": nombre_archivo,
                     "pagina": page_num + 1,
                     "fragmento": texto
                 }
                 out.write(json.dumps(fragmento, ensure_ascii=False) + "\n")
-                paginas_procesadas += 1
+                paginas_con_texto += 1
                 
     doc.close()
-    os.remove(temp_path)
-    print(f"   ✅ ÉXITO: {json_nombre} guardado ({paginas_procesadas} páginas).")
+    os.remove("temp.pdf")
+    print(f"   ✅ ÉXITO: Guardado {ruta_salida_json.name} con {paginas_con_texto} páginas procesadas.")
 
 def main():
-    # --- FASE 1: AUDITORÍA DE LA WEB OFICIAL (Historial y enlaces del pasado) ---
-    print(f"\n🌐 [FASE 1] Escaneando listado oficial: {PAGINA_BOLETINES}")
+    # =========================================================================
+    # FASE 1: AUDITORÍA DE LA WEB OFICIAL (Historial y enlaces con guiones mixtos)
+    # =========================================================================
+    print(f"\n🌐 [FASE 1] Escaneando listado oficial: {pagina_boletines}")
     try:
-        html = requests.get(PAGINA_BOLETINES).text
+        html = requests.get(pagina_boletines).text
     except Exception as e:
-        print(f"❌ Error al conectar a la web oficial: {e}")
+        print(f"❌ Error crítico de conexión al portal oficial: {e}")
         html = ""
 
-    # Captura boletines tanto con guion medio como con guion bajo
-    urls_encontradas = re.findall(r'href="(.*?boletin[-_]\d+\.pdf)"', html)
-    urls_encontradas = sorted(set(urls_encontradas))
-    print(f"🔎 Se detectaron {len(urls_encontradas)} enlaces de boletines en la web.")
+    # Captura enlaces tanto con guion medio (-) como con guion bajo (_)
+    pdfs = re.findall(r'href="(.*?boletin[-_]\d+\.pdf)"', html)
+    pdfs = sorted(set(pdfs))
+    print(f"🔎 Se detectaron {len(pdfs)} enlaces de boletines en el HTML de la página.")
 
-    boletines_procesados_esta_vez = 0
+    boletines_descargados_fase1 = 0
 
-    for pdf_url in urls_encontradas:
+    for pdf_url in pdfs:
         nombre = pdf_url.split("/")[-1]
-        match = re.search(r"boletin[-_](\d+)", nombre)
-        if not match:
+        
+        # Valida que el nombre contenga la palabra boletín y extrae su número
+        match_numero = re.search(r"boletin[-_](\d+)", nombre)
+        if not match_numero:
             continue
             
-        numero = int(match.group(1))
-        json_path = CHUNKS_DIR / f"boletines_part_{numero}.jsonl"
+        numero = int(match_numero.group(1))
+        json_nombre = f"boletines_part_{numero}.jsonl"
+        json_path = json_folder / json_nombre
         
         if json_path.exists():
             continue
 
-        print(f"▶️ NUEVO HISTÓRICO DETECTADO: Boletín {numero}")
+        print(f"▶️ NUEVO HISTÓRICO DETECTADO: Boletín {numero} ({nombre})")
         try:
-            # Reconstrucción de URL relativa si es necesario
+            # Reconstrucción de URLs relativas (Manejo de rutas con .. o /)
             if pdf_url.startswith("..") or pdf_url.startswith("/"):
                 url_limpia = pdf_url.lstrip(".")
                 if not url_limpia.startswith("/"):
                     url_limpia = "/" + url_limpia
-                full_url = f"{DOMINIO_BASE}{url_limpia}"
+                full_url = f"{dominio_base}{url_limpia}"
             elif not pdf_url.startswith("http"):
-                full_url = f"{DOMINIO_BASE}/pdf/boletines/{nombre}"
+                full_url = f"{dominio_base}/pdf/boletines/{nombre}"
             else:
                 full_url = pdf_url
 
-            procesar_y_guardar_pdf(full_url, nombre, numero)
-            boletines_procesados_esta_vez += 1
+            procesar_pdf_a_jsonl(full_url, nombre, json_path)
+            boletines_descargados_fase1 += 1
         except Exception as e:
-            print(f"   ❌ Error procesando {nombre}: {e}")
+            print(f"   ❌ Error procesando {nombre}: {e} (URL: {pdf_url})")
 
-    # --- FASE 2: BÚSQUEDA PROACTIVA DEL BOLETÍN DIARIO (Siguiente número) ---
-    print("\n🔍 [FASE 2] Buscando actualización del boletín diario...")
-    ultimo = get_latest_boletin_number()
-    siguiente = ultimo + 1
-    json_siguiente_path = CHUNKS_DIR / f"boletines_part_{siguiente}.jsonl"
+    # =========================================================================
+    # FASE 2: BÚSQUEDA DE CONTINGENCIA DIARIA (Prevenir demoras de actualización web)
+    # =========================================================================
+    print("\n🔍 [FASE 2] Iniciando verificación del boletín diario de contingencia...")
+    ultimo_real = extraer_maximo_numero_real()
+    siguiente_esperado = ultimo_real + 1
+    json_esperado_path = json_folder / f"boletines_part_{siguiente_esperado}.jsonl"
 
-    if json_siguiente_path.exists():
-        print(f"El boletín diario esperado ({siguiente}) ya se encuentra procesado.")
+    if json_esperado_path.exists():
+        print(f"El boletín diario esperado ({siguiente_esperado}) ya se encuentra guardado en la carpeta chunks.")
     else:
-        print(f"El último número registrado en chunks es {ultimo}. Buscando el esperado {siguiente}...")
+        print(f"El número real más alto en tu carpeta es {ultimo_real}. Buscando proactivamente el esperado {siguiente_esperado}...")
         
-        # Intentamos buscar de forma proactiva con guion medio
-        url_intento_medio = f"{DOMINIO_BASE}/pdf/boletines/boletin-{siguiente}.pdf"
-        nombre_intento_medio = f"boletin-{siguiente}.pdf"
+        url_intento_medio = f"{dominio_base}/pdf/boletines/boletin-{siguiente_esperado}.pdf"
+        nombre_intento_medio = f"boletin-{siguiente_esperado}.pdf"
         
-        # Intentamos buscar de forma proactiva con guion bajo
-        url_intento_bajo = f"{DOMINIO_BASE}/pdf/boletines/boletin_{siguiente}.pdf"
-        nombre_intento_bajo = f"boletin_{siguiente}.pdf"
+        url_intento_bajo = f"{dominio_base}/pdf/boletines/boletin_{siguiente_esperado}.pdf"
+        nombre_intento_bajo = f"boletin_{siguiente_esperado}.pdf"
         
-        exito_diario = False
+        logrado_con_exito = False
         
-        # Probar primero con guion medio
-        print(f"   Tentando descarga directa: {url_intento_medio}")
-        r = requests.head(url_guion := url_intento_medio)
-        if r.status_code == 200:
+        # Intento A: Probar con guion medio directo al servidor
+        print(f"   Intentando acceso directo con guion medio: {url_intento_medio}")
+        response_test = requests.head(url_intento_medio)
+        if response_test.status_code == 200:
             try:
-                procesar_y_guardar_pdf(url_intento_medio, nombre_intento_medio, siguiente)
-                exito_diario = True
+                procesar_pdf_a_jsonl(url_intento_medio, nombre_intento_medio, json_esperado_path)
+                logrado_con_exito = True
             except Exception as e:
-                print(f"   ❌ Error en descarga directa con guion medio: {e}")
-                
-        # Si falló, probar con guion bajo
-        if not exito_diario:
-            print(f"   No encontrado con guion medio. Tentando descarga directa: {url_intento_bajo}")
-            r = requests.head(url_intento_bajo)
-            if r.status_code == 200:
+                print(f"   ❌ Error durante el procesamiento de la descarga directa (guion medio): {e}")
+
+        # Intento B: Si falló, probar con guion bajo directo al servidor
+        if not logrado con_exito:
+            print(f"   No disponible con guion medio. Intentando acceso directo con guion bajo: {url_intento_bajo}")
+            response_test = requests.head(url_intento_bajo)
+            if response_test.status_code == 200:
                 try:
-                    procesar_y_guardar_pdf(url_intento_bajo, nombre_intento_bajo, siguiente)
-                    exito_diario = True
+                    procesar_pdf_a_jsonl(url_intento_bajo, nombre_intento_bajo, json_esperado_path)
+                    logrado_con_exito = True
                 except Exception as e:
-                    print(f"   ❌ Error en descarga directa con guion bajo: {e}")
-                    
-        if not exito_diario:
-            print(f"📭 Fin de búsqueda: El boletín oficial {siguiente} aún no está disponible en el servidor remoto.")
+                    print(f"   ❌ Error durante el procesamiento de la descarga directa (guion bajo): {e}")
+
+        if not logrado_con_exito:
+            print(f"📭 Fin del escaneo diario: El boletín número {siguiente_esperado} no está publicado aún en los servidores de Quilmes.")
 
     print("\n🏁 Proceso unificado finalizado.")
 
