@@ -5,7 +5,6 @@ on:
   workflow_dispatch:
 
   schedule:
-    # 07:30 Argentina (UTC-3)
     - cron: '30 10 * * 1-5'
 
 permissions:
@@ -19,53 +18,29 @@ jobs:
 
     steps:
 
-      # =====================================================
-      # CHECKOUT
-      # =====================================================
-
       - name: 📥 Clonar repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      # =====================================================
-      # PYTHON
-      # =====================================================
 
       - name: 🐍 Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # =====================================================
-      # DEPENDENCIAS
-      # =====================================================
-
       - name: 📦 Instalar dependencias
         run: |
           python -m pip install --upgrade pip
           pip install requests PyMuPDF beautifulsoup4
-
-      # =====================================================
-      # DEBUG INICIAL
-      # =====================================================
 
       - name: 🔎 Verificar chunks existentes
         run: |
           echo "===== JSON CHUNKS ====="
           ls -lah json_chunks | tail -20 || true
 
-      # =====================================================
-      # EJECUCIÓN
-      # =====================================================
-
       - name: ⚙️ Ejecutar update_boletines.py
         run: |
-          python update_boletines.py
-
-      # =====================================================
-      # DEBUG FINAL
-      # =====================================================
+          python scripts/update_boletines.py
 
       - name: 🔎 Verificar nuevos archivos
         run: |
@@ -75,10 +50,6 @@ jobs:
           echo ""
           echo "===== ÚLTIMOS CHUNKS ====="
           ls -lah json_chunks | tail -20 || true
-
-      # =====================================================
-      # COMMIT
-      # =====================================================
 
       - name: 🚀 Commit y push automático
         run: |
