@@ -6,7 +6,7 @@ on:
     - cron: '30 10 * * 1-5'  # De lunes a viernes a las 10:30 UTC (7:30 AM hora Argentina)
 
 permissions:
-  contents: write  # Permite al bot guardar los archivos JSON y PDF en el repo
+  contents: write  # Permite al bot guardar los archivos en el repo
 
 jobs:
   procesar-y-actualizar:
@@ -25,14 +25,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests tqdm PyMuPDF beautifulsoup4
 
-      - name: ⚙️ 1. Procesar Boletín Diario
+      - name: ⚙️ Ejecutar Sistema Unificado de Boletines
         run: python procesar_boletin.py
-
-      - name: ⚙️ 2. Actualizar Historial Completo
-        run: python github/scripts/update_boletines.py
 
       - name: 🚀 Guardar todos los cambios en la web
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "🤖 Procesamiento y actualización automática de boletines"
-          file_pattern: "json_chunks/* pdfs/* boletines.jsonl"
+          commit_message: "🤖 Procesamiento automático de boletines (Fase 1 y Fase 2)"
+          file_pattern: "json_chunks/* pdfs/*"
