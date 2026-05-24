@@ -1,6 +1,3 @@
-# .github/workflows/automatizacion.yml
-
-```yaml
 name: Sistema Unificado Boletines 2026
 
 on:
