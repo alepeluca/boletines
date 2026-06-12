@@ -2,32 +2,30 @@
 # -*- coding: utf-8 -*-
 
 """
-update_licitaciones.py — Versión 1.0.0
+update_licitaciones.py — Versión 2.0.0
 
 FLUJO:
-1. Detecta el último chunk existente de licitaciones.
-2. Lee la última licitación procesada y calcula la siguiente según tu lógica:
-   - Recorre años del presente al pasado (26 al 00).
-   - Recorre números crecientes (001 al 999).
-   - Controla subpliegos Z (1 al 6).
-3. Si la variante Z=1 no existe en un número, pasa al número siguiente.
-4. Si la variante Z=1 no existe en el número 001 de un año, o si se interrumpe la correlatividad, salta de año.
-5. Si existe: descarga el PDF, busca en la pág. 1 la palabra "OBJETO:", extrae 5 palabras en CamelCase,
-   y genera un nombre estructurado: LiciPubli_XXXYY0-Z_TextoObjeto.pdf para los fragmentos del chunk.
+1. Detecta el último chunk existente de licitaciones (licitaciones_part_*.jsonl).
+2. Lee la última línea para calcular la posición exacta de reinicio.
+3. Descarga de forma incremental el siguiente PDF válido usando range inverso de años (26 al 00).
+4. Aplica Tesseract OCR de forma OBLIGATORIA a todas las páginas.
+5. Busca "OBJETO:" en la primera página procesada por el OCR, toma 5 palabras en CamelCase.
+6. Guarda el nuevo chunk indexado con el formato de ID y archivo requerido.
 """
 
 import json
 import os
 import re
 from pathlib import Path
-import fitz
 import requests
+import pytesseract
+from pdf2image import convert_from_bytes
 
 # =========================================================
 # CONFIG
 # =========================================================
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 FECHA_MODIFICACION = "12-06-2026"
 
 JSON_CHUNKS_DIR = Path("json_chunks")
@@ -68,7 +66,7 @@ def find_latest_chunk():
 def load_last_licitacion_state(chunk_path):
     """
     Retorna el estado de la última licitación del último chunk: (anio_int, xxx_int, z_int, hubo_exito_en_anio)
-    Si el chunk está vacío o no hay, inicializa en el punto de partida (año 26, número 1, z 0).
+    Si el chunk no existe, inicializa en el año 26, número 1, z 0.
     """
     ultima_linea = None
     if not chunk_path:
@@ -108,14 +106,19 @@ def verificar_existencia_url(url):
 
 
 def limpiar_texto_objeto(texto_completo, max_palabras=5):
-    """Busca 'OBJETO:' en el texto, toma la línea y extrae N palabras en CamelCase."""
+    """Busca 'OBJETO:' en el texto del OCR, toma la línea y extrae N palabras en CamelCase."""
     if "OBJETO:" not in texto_completo:
         return "SinObjeto"
     
     # Extraer el contenido después de OBJETO:
-    parte_objeto = texto_completo.split("OBJETO:", 1)[1].strip()
+    partes = texto_completo.split("OBJETO:", 1)
+    if len(partes) < 2:
+        return "SinObjeto"
+        
+    parte_objeto = partes[1].strip()
     # Tomar la primera línea significativa
-    primera_linea = parte_objeto.split("\n")[0].strip()
+    lineas_objeto = parte_objeto.split("\n")
+    primera_linea = lineas_objeto[0].strip() if lineas_objeto else ""
     
     # Remover caracteres especiales y quedarse con letras/números
     limpio = re.sub(r'[^\w\s]', '', primera_linea)
@@ -132,43 +135,59 @@ def limpiar_texto_objeto(texto_completo, max_palabras=5):
 
 
 def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
-    """Descarga el PDF a memoria temporal, analiza y guarda el nuevo chunk incremental."""
+    """Descarga el PDF y le aplica OCR obligatorio a todas sus páginas."""
     print(f"[INFO] Descargando pliego: {url}")
     response = requests.get(url, headers=HEADERS, timeout=20)
     response.raise_for_status()
 
-    # Escribir contenido en un archivo temporal para que PyMuPDF lo lea
-    with os.fdopen(os.open(os.devnull, os.O_RDWR), 'w') as devnull: # Safe initialization
-        pass
+    print("[INFO] Iniciando conversión a imagen para procesamiento OCR obligatorio...")
+    frags_finales = []
+    texto_p1 = ""
+
+    try:
+        # Convertir bytes de PDF a imágenes (150 DPI para balancear velocidad y precisión)
+        paginas_imagenes = convert_from_bytes(response.content, dpi=150)
         
-    with fitz.open(stream=response.content, filetype="pdf") as doc:
-        # Obtener texto de la primera página para determinar el Objeto
-        texto_p1 = doc[0].get_text() if len(doc) > 0 else ""
+        for i, imagen in enumerate(paginas_imagenes, start=1):
+            print(f"[OCR] Procesando página {i}/{len(paginas_imagenes)}...")
+            
+            # Forzar ejecución de Tesseract en español
+            texto_extraido = pytesseract.image_to_string(imagen, lang='spa').strip()
+            
+            if i == 1:
+                texto_p1 = texto_extraido
+            
+            if texto_extraido:
+                frags_finales.append({
+                    "pagina": i,
+                    "fragmento": texto_extraido
+                })
+                
+    except Exception as e:
+        print(f"[ERROR] Falló el motor de Tesseract: {e}")
+        return False
+
+    if frags_finales:
+        # Procesar las 5 palabras del objeto en CamelCase desde la página 1 del OCR
         objeto_camel = limpiar_texto_objeto(texto_p1, max_palabras=5)
-        
-        # Estructura del nombre de archivo requerida por el usuario
         nombre_archivo_virtual = f"LiciPubli_{codigo_completo}_{objeto_camel}.pdf"
         
-        frags = []
-        for i, page in enumerate(doc, start=1):
-            text = page.get_text().strip()
-            if not text:
-                continue
-                
-            frags.append({
-                "id": f"{nombre_archivo_virtual}_p{i}_f0",
-                "archivo": nombre_archivo_virtual,
-                "pagina": i,
-                "fragmento": text
-            })
-
-    if frags:
+        # Armar y guardar el archivo JSONL
         salida = JSON_CHUNKS_DIR / f"licitaciones_part_{chunk_index}.jsonl"
         with open(salida, "w", encoding="utf-8") as f:
-            for frag in frags:
-                f.write(json.dumps(frag, ensure_ascii=False) + "\n")
-        print(f"[OK] Chunk generado con éxito: {salida.name} -> {nombre_archivo_virtual}")
+            for f_data in frags_finales:
+                chunk_linea = {
+                    "id": f"{nombre_archivo_virtual}_p{f_data['pagina']}_f0",
+                    "archivo": nombre_archivo_virtual,
+                    "pagina": f_data['pagina'],
+                    "fragmento": f_data['fragmento']
+                }
+                f.write(json.dumps(chunk_linea, ensure_ascii=False) + "\n")
+                
+        print(f"[OK] Chunk generado con OCR obligatorio: {salida.name} -> {nombre_archivo_virtual}")
         return True
+
+    print(f"[ERROR] No se pudo leer texto en el documento {url}")
     return False
 
 
@@ -184,17 +203,14 @@ def main():
     
     # Determinar los siguientes índices a probar basados en dónde quedó el último JSONL
     if z_actual > 0 and z_actual < 6:
-        # Si quedó a mitad de las variantes Z de una licitación que existía, prueba la siguiente Z
         siguiente_anio = anio_actual
         siguiente_xxx = xxx_actual
         siguiente_z = z_actual + 1
     else:
-        # Si terminó las Z o es un proceso nuevo, pasa al siguiente número correlativo XXX
         siguiente_anio = anio_actual
         siguiente_xxx = xxx_actual + 1 if last_chunk else 1
         siguiente_z = 1
 
-    # Iniciar la máquina de estado secuencial e inteligente
     chunk_index_nuevo = last_idx + 1
     
     print(f"[INFO] Último chunk procesado: {last_idx}")
@@ -204,14 +220,12 @@ def main():
     for anio_int in range(siguiente_anio, -1, -1):
         anio_str = f"{anio_int:02d}"
         
-        # Si saltamos de año, el contador XXX se reinicia en 1 y Z en 1
         start_xxx = siguiente_xxx if anio_int == siguiente_anio else 1
         hubo_licitaciones_en_este_anio = hubo_exito_previo if anio_int == siguiente_anio else False
-
         
         for xxx_int in range(start_xxx, 1000):
             xxx_str = f"{xxx_int:03d}"
-            start_z = siguiente_z if (anio_int == siguiente_anio and xxx_int == start_xxx) else 1
+            start_z = siguiente_z if (anio_int == suficiente_anio:=siguiente_anio and xxx_int == start_xxx) else 1
             
             encontrado_en_este_numero = False
             
@@ -223,15 +237,14 @@ def main():
                 
                 if verificar_existencia_url(url_prueba):
                     print("¡EXISTE!")
-                    # Descargar, procesar texto y guardar nuevo chunk incremental
                     exito = procesar_y_guardar_pdf(url_prueba, codigo_licitacion, chunk_index_nuevo)
                     if exito:
-                        return # Terminamos la ejecución por hoy (descarga incremental de a 1 archivo)
+                        return # Descarga incremental: frena al procesar exitosamente un archivo
                 else:
                     print("no existe")
-                    break # Si no existe la variante, frena el bucle Z
+                    break # Rompe Z si la primera variante no existe
             
-            # Control de saltos inteligentes idéntico a tu lógica de consola
+            # Control de saltos de secuencia anuales
             if start_z == 1 and not encontrado_en_este_numero:
                 if xxx_str == "001":
                     print(f"[AVISO] Licitación inicial 001 de 20{anio_str} no existe. Saltando de año...")
@@ -240,7 +253,6 @@ def main():
                     print(f"[FIN DE PERÍODO] Fin de secuencia correlativa para 20{anio_str}. Saltando de año...")
                     break
                     
-        # Resetear el inicio de las XXX si pasamos al año anterior en el bucle externo
         siguiente_z = 1
         siguiente_xxx = 1
 
