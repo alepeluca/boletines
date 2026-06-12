@@ -22,7 +22,7 @@ jobs:
     - name: Instalar Tesseract OCR en el sistema operativo
       run: |
         sudo apt-get update
-        sudo apt-get install -y tesseract-ocr tesseract-ocr-spa poppler-utils
+        sudo apt-get install -y tesseract-ocr tesseract-ocr-spa
 
     - name: Instalar librerías necesarias de Python
       run: |
