@@ -206,7 +206,8 @@ def main():
         
         # Si saltamos de año, el contador XXX se reinicia en 1 y Z en 1
         start_xxx = siguiente_xxx if anio_int == siguiente_anio else 1
-        hubo_licitaciones_en_este_anio = hubo_exito_previo if anio_int == suficiente_anio else False
+        hubo_licitaciones_en_este_anio = hubo_exito_previo if anio_int == siguiente_anio else False
+
         
         for xxx_int in range(start_xxx, 1000):
             xxx_str = f"{xxx_int:03d}"
