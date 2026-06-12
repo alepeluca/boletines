@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-update_licitaciones.py — Versión 3.1.0
+update_licitaciones.py — Versión 3.2.0
 
-FLUJO CONTINUO:
+FLUJO CONTINUO CORREGIDO:
 1. Lee todas las URLs del archivo estático 'LiciURL' de la raíz.
-2. Detecta cuántas ya se procesaron contando los archivos en 'json_chunks/'.
-3. Ejecuta un bucle continuo para procesar TODAS las URLs pendientes una detrás
-   de otra en la misma corrida, aplicando OCR obligatorio.
-4. Si finalizan todas las URLs, muestra el aviso de completado.
+2. Al iniciar, cuenta cuántos chunks históricos existen en la carpeta para saber dónde retomar.
+3. Avanza de forma secuencial usando un índice numérico en memoria interna, evitando
+   el bucle infinito causado por la falta de persistencia inmediata en el disco de GitHub.
+4. Genera los chunks incrementales correctamente (licitaciones_part_0, _1, _2, etc.).
 """
 
 import json
@@ -24,7 +24,7 @@ from pdf2image import convert_from_bytes
 # CONFIG
 # =========================================================
 
-VERSION = "3.1.0"
+VERSION = "3.2.0"
 FECHA_MODIFICACION = "12-06-2026"
 
 JSON_CHUNKS_DIR = Path("json_chunks")
@@ -50,9 +50,10 @@ print("=" * 60 + "\n")
 # HELPERS
 # =========================================================
 
-def get_processed_count():
+def get_initial_processed_count():
     """
-    Cuenta cuántos archivos JSONL válidos existen en la carpeta json_chunks.
+    Cuenta los archivos JSONL existentes únicamente al arrancar el script
+    para determinar el punto de partida inicial.
     """
     contador = 0
     for f in JSON_CHUNKS_DIR.glob("licitaciones_part_*.jsonl"):
@@ -179,26 +180,36 @@ def main():
     if not todas_las_urls:
         return
 
-    # Iniciar ciclo de procesamiento continuo
-    while True:
-        chunks_procesados_count = get_processed_count()
-        
-        # Condición de salida si se terminaron todas las URLs listadas
-        if chunks_procesados_count >= len(todas_las_urls):
-            print("\n[INFO] No hay nuevas licitaciones para procesar. Todas las URLs completadas.")
-            break
+    # 1. Obtener el punto de partida inicial basándose en los archivos actuales en Git
+    punto_partida = get_initial_processed_count()
+    print(f"[INFO] Total de URLs registradas en LiciURL: {len(todas_las_urls)}")
+    print(f"[INFO] Punto de partida inicial calculado: índice {punto_partida}")
 
-        url_objetivo = todas_las_urls[chunks_procesados_count]
+    if punto_partida >= len(todas_las_urls):
+        print("\n[INFO] No hay nuevas licitaciones para procesar. Todas las URLs completadas.")
+        return
+
+    # 2. Control numérico mediante índice en memoria para el bucle continuo
+    indice_actual = punto_partida
+
+    while indice_actual < len(todas_las_urls):
+        url_objetivo = todas_las_urls[indice_actual]
         codigo_licitacion = extraer_codigo_de_url(url_objetivo)
         
-        print(f"\n[PROCESO] Procesando elemento [{chunks_procesados_count + 1}/{len(todas_las_urls)}]")
+        print(f"\n[PROCESO] Procesando elemento [{indice_actual + 1}/{len(todas_las_urls)}]")
         print(f"[INFO] URL: {url_objetivo}")
         
-        exito = procesar_y_guardar_pdf(url_objetivo, codigo_licitacion, chunks_procesados_count)
+        exito = procesar_y_guardar_pdf(url_objetivo, codigo_licitacion, indice_actual)
         
         if not exito:
-            print(f"[ALERTA] Deteniendo ejecución continua debido a un error en el índice {chunks_procesados_count}.")
+            print(f"[ALERTA] Deteniendo ejecución continua debido a un problema con el índice {indice_actual}.")
             break
+            
+        # Sumamos 1 de forma estricta en memoria para pasar a la siguiente URL en la próxima vuelta
+        indice_actual += 1
+
+    if indice_actual >= len(todas_las_urls):
+        print("\n[INFO] Se han procesado con éxito todos los elementos del archivo LiciURL.")
 
 
 if __name__ == "__main__":
