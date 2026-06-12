@@ -25,7 +25,7 @@ jobs:
         pip install pymupdf requests
 
     - name: Ejecutar script de licitaciones
-      run: python update_licitaciones.py
+      run: python scripts/update_licitaciones.py
 
     - name: Guardar cambios y subir al repositorio
       run: |
