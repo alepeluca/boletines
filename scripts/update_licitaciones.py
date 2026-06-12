@@ -31,7 +31,7 @@ VERSION = "1.0.0"
 FECHA_MODIFICACION = "12-06-2026"
 
 JSON_CHUNKS_DIR = Path("json_chunks")
-BASE_URL = "https://quilmes.gov.ar/contrataciones/licpublicnas/"
+BASE_URL = "https://quilmes.gov.ar/contrataciones/licpublicas/"
 
 HEADERS = {
     "User-Agent": (
