@@ -2,32 +2,35 @@
 # -*- coding: utf-8 -*-
 
 """
-update_licitaciones.py — Versión 4.0.0
+update_licitaciones.py — Versión 4.1.1
 
-FLUJO INCREMENTAL ROBUSTO:
+FLUJO INCREMENTAL ROBUSTO (OPTIMIZADO PARA MEMORIA):
 1. Lee todas las URLs del archivo estático 'LiciURL' de la raíz.
 2. Calcula el próximo índice numérico real buscando el número máximo de chunk existente.
 3. Toma la URL correspondiente a ese índice y procesa UN SOLO archivo por corrida.
 4. Valida rigurosamente que las cabeceras de respuesta correspondan a un archivo PDF.
-5. Ejecuta Tesseract OCR obligatorio en todas las páginas (idioma español).
-6. Utiliza expresiones regulares insensibles a mayúsculas/minúsculas para extraer el OBJETO.
-7. Guarda un JSONL enriquecido con metadatos nativos (codigo, url, procesado, id, fragmento).
+5. Utiliza PyMuPDF (fitz) para renderizar el PDF hoja por hoja de forma secuencial,
+   evitando desbordamientos de memoria RAM en GitHub Actions.
+6. Ejecuta Tesseract OCR obligatorio en cada página procesada (idioma español).
+7. Guarda un JSONL enriquecido con metadatos nativos (codigo, url, archivo, id, fragmento).
 """
 
 import json
 import os
 import re
+import io
 from datetime import datetime
 from pathlib import Path
 import requests
+import fitz  # PyMuPDF
 import pytesseract
-from pdf2image import convert_from_bytes
+from PIL import Image
 
 # =========================================================
 # CONFIG
 # =========================================================
 
-VERSION = "4.0.0"
+VERSION = "4.1.0"
 FECHA_MODIFICACION = "12-06-2026"
 
 JSON_CHUNKS_DIR = Path("json_chunks")
@@ -57,7 +60,6 @@ def get_next_chunk_index():
     """
     Busca el número de índice máximo real entre los archivos jsonl existentes
     para evitar problemas si faltan archivos intermedios en la secuencia.
-    Devuelve el número siguiente libre.
     """
     indices = []
     for f in JSON_CHUNKS_DIR.glob("licitaciones_part_*.jsonl"):
@@ -90,9 +92,7 @@ def cargar_urls_pendientes():
 
 def extraer_codigo_de_url(url):
     """
-    Extrae el patrón de código flexible de la URL.
-    Soporta formatos estándar y variantes numéricas de licitaciones con guion.
-    Ejemplo: 001220-1 o 012260-2
+    Extrae el patrón de código flexible de la URL (ej. 001220-1 o 012260-2).
     """
     match = re.search(r"(\d{6}-\d+)", url)
     if match:
@@ -110,15 +110,12 @@ def limpiar_texto_objeto(texto_completo, max_palabras=5):
         return "SinObjeto"
         
     primera_linea_objeto = match.group(1).strip()
-    # Aislar solo la primera línea en caso de que contenga saltos
     lineas = primera_linea_objeto.split("\n")
     texto_objeto = lineas[0].strip() if lineas else ""
     
-    # Remover caracteres especiales de control de archivos de sistema
     limpio = re.sub(r'[^\w\s]', '', texto_objeto)
     palabras = limpio.split()
     
-    # Filtrar conectores y capitalizar para CamelCase
     palabras_filtradas = [p for p in palabras if len(p) > 1 or p.lower() in ['de', 'en', 'la', 'lo']]
     palabras_finales = palabras_filtradas[:max_palabras]
     
@@ -130,8 +127,8 @@ def limpiar_texto_objeto(texto_completo, max_palabras=5):
 
 def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
     """
-    Descarga el PDF, valida su Content-Type y le aplica OCR obligatorio 
-    a todas las páginas guardando la metadata enriquecida estructurada.
+    Descarga el PDF, valida su estructura y renderiza secuencialmente
+    hoja por hoja a imagen para aplicarle el OCR de Tesseract de forma segura.
     """
     print(f"[INFO] Descargando pliego: {url}")
     print(f"[CODIGO] {codigo_completo}")
@@ -144,35 +141,52 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
         print(f"[ERROR] No se pudo descargar el archivo: {e}")
         return False
 
-    # Validar que el archivo descargado sea efectivamente un documento PDF
     content_type = response.headers.get("Content-Type", "").lower()
     if "pdf" not in content_type:
         print(f"[ERROR] El archivo descargado no es un PDF válido. Content-Type: {content_type}")
         return False
 
-    print("[INFO] Iniciando conversión completa a imagen para procesamiento OCR obligatorio...")
+    print("[INFO] Abriendo documento PDF en memoria para extracción por páginas...")
     frags_finales = []
     texto_p1 = ""
 
     try:
-        paginas_imagenes = convert_from_bytes(response.content, dpi=150)
-        
-        for i, imagen in enumerate(paginas_imagenes, start=1):
-            print(f"[OCR] Procesando página {i}/{len(paginas_imagenes)}...")
-            # Forzar ejecución de Tesseract en idioma español
-            texto_extraido = pytesseract.image_to_string(imagen, lang='spa').strip()
+        # Abrimos el documento de forma directa usando fitz desde los bytes en memoria
+        with fitz.open(stream=response.content, filetype="pdf") as doc:
+            total_paginas = len(doc)
+            print(f"[INFO] Total de páginas detectadas de forma nativa: {total_paginas}")
             
-            if i == 1:
-                texto_p1 = texto_extraido
-            
-            if texto_extraido:
-                frags_finales.append({
-                    "pagina": i,
-                    "fragmento": texto_extraido
-                })
+            # Iteramos página por página de forma secuencial
+            for index_pag in range(total_paginas):
+                numero_pagina_real = index_pag + 1
+                print(f"[OCR] Procesando página {numero_pagina_real}/{total_paginas}...")
+                
+                # Cargamos la página aislada y la renderizamos a una matriz de pixeles (150 DPI)
+                page = doc[index_pag]
+                pix = page.get_pixmap(dpi=150)
+                
+                # Convertimos los pixeles a bytes PNG e inicializamos el objeto de imagen PIL
+                img_bytes = pix.tobytes("png")
+                imagen_pil = Image.open(io.BytesIO(img_bytes))
+                
+                # Ejecutamos Tesseract sobre la imagen de la página actual
+                texto_extraido = pytesseract.image_to_string(imagen_pil, lang='spa').strip()
+                
+                if numero_pagina_real == 1:
+                    texto_p1 = texto_extraido
+                
+                if texto_extraido:
+                    frags_finales.append({
+                        "pagina": numero_pagina_real,
+                        "fragmento": texto_extraido
+                    })
+                    
+                # Liberamos memoria explícitamente en cada ciclo de página
+                pix = None
+                imagen_pil.close()
                 
     except Exception as e:
-        print(f"[ERROR] Falló el motor de Tesseract / pdf2image: {e}")
+        print(f"[ERROR] Falló el procesamiento por páginas con PyMuPDF / Tesseract: {e}")
         return False
 
     if frags_finales:
@@ -180,7 +194,7 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
         nombre_archivo_virtual = f"LiciPubli_{codigo_completo}_{objeto_camel}.pdf"
         timestamp_procesado = datetime.utcnow().isoformat()
         
-        # Generar el archivo JSONL incremental con toda la metadata unificada
+        # Guardar el archivo JSONL incremental
         salida = JSON_CHUNKS_DIR / f"licitaciones_part_{chunk_index}.jsonl"
         with open(salida, "w", encoding="utf-8") as f:
             for f_data in frags_finales:
@@ -198,7 +212,7 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
         print(f"[OK] Chunk generado con éxito: {salida.name} -> {nombre_archivo_virtual}")
         return True
 
-    print(f"[ERROR] No se pudo extraer texto legible mediante OCR del documento.")
+    print(f"[ERROR] No se pudo extraer texto legible mediante OCR de ninguna página del documento.")
     return False
 
 
@@ -207,22 +221,18 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
 # =========================================================
 
 def main():
-    # 1. Cargar la lista completa de URLs estáticas
     todas_las_urls = cargar_urls_pendientes()
     if not todas_las_urls:
         return
 
-    # 2. Calcular el próximo punto de ejecución real en base al índice máximo encontrado
     proximo_indice_pendiente = get_next_chunk_index()
     print(f"[INFO] Total de URLs registradas en LiciURL: {len(todas_las_urls)}")
     print(f"[INFO] Cantidad de licitaciones ya procesadas: {proximo_indice_pendiente}")
 
-    # 3. Validar si quedan elementos por procesar en la lista
     if proximo_indice_pendiente >= len(todas_las_urls):
         print("\n[INFO] No hay nuevas licitaciones para procesar.")
         return
 
-    # 4. Aislar y ejecutar de forma incremental una única URL por corrida
     url_objetivo = todas_las_urls[proximo_indice_pendiente]
     codigo_licitacion = extraer_codigo_de_url(url_objetivo)
     
