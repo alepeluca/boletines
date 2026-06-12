@@ -2,16 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-update_licitaciones.py — Versión 3.0.0
+update_licitaciones.py — Versión 3.1.0
 
-FLUJO:
+FLUJO CONTINUO:
 1. Lee todas las URLs del archivo estático 'LiciURL' de la raíz.
-2. Cuenta cuántos archivos 'licitaciones_part_*.jsonl' ya existen en 'json_chunks/'.
-3. Dado que cada archivo JSONL representa exactamente una licitación procesada de forma secuencial,
-   el script reanuda salteándose las primeras N URLs (donde N es la cantidad de chunks existentes).
-4. Descarga la siguiente URL pendiente, ejecuta OCR obligatorio en todas sus páginas usando Tesseract.
-5. Busca "OBJETO:" en la primera página, extrae hasta 5 palabras para armar CamelCase.
-6. Guarda el resultado en un nuevo chunk incremental 'licitaciones_part_N.jsonl'.
+2. Detecta cuántas ya se procesaron contando los archivos en 'json_chunks/'.
+3. Ejecuta un bucle continuo para procesar TODAS las URLs pendientes una detrás
+   de otra en la misma corrida, aplicando OCR obligatorio.
+4. Si finalizan todas las URLs, muestra el aviso de completado.
 """
 
 import json
@@ -26,7 +24,7 @@ from pdf2image import convert_from_bytes
 # CONFIG
 # =========================================================
 
-VERSION = "3.0.0"
+VERSION = "3.1.0"
 FECHA_MODIFICACION = "12-06-2026"
 
 JSON_CHUNKS_DIR = Path("json_chunks")
@@ -54,8 +52,7 @@ print("=" * 60 + "\n")
 
 def get_processed_count():
     """
-    Cuenta cuántos archivos JSONL válidos e indexados existen en la carpeta json_chunks.
-    Cada archivo corresponde exactamente a una licitación ya procesada de forma secuencial.
+    Cuenta cuántos archivos JSONL válidos existen en la carpeta json_chunks.
     """
     contador = 0
     for f in JSON_CHUNKS_DIR.glob("licitaciones_part_*.jsonl"):
@@ -85,12 +82,10 @@ def cargar_urls_pendientes():
 def extraer_codigo_de_url(url):
     """
     Extrae el patrón de código XXXYY0-Z de la URL.
-    Ejemplo: https://.../001220-1.pdf -> 001220-1
     """
     match = re.search(r"(\d{3}\d{2}0-\d)", url)
     if match:
         return match.group(1)
-    # Fallback si por alguna razón la URL no sigue el patrón estricto
     return "000000-0"
 
 
@@ -134,13 +129,10 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
     texto_p1 = ""
 
     try:
-        # Convertir bytes de PDF a imágenes (150 DPI para balancear velocidad y precisión)
         paginas_imagenes = convert_from_bytes(response.content, dpi=150)
         
         for i, imagen in enumerate(paginas_imagenes, start=1):
             print(f"[OCR] Procesando página {i}/{len(paginas_imagenes)}...")
-            
-            # Forzar ejecución de Tesseract en idioma español
             texto_extraido = pytesseract.image_to_string(imagen, lang='spa').strip()
             
             if i == 1:
@@ -157,11 +149,9 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
         return False
 
     if frags_finales:
-        # Procesar las 5 palabras del objeto en CamelCase desde la página 1 del OCR
         objeto_camel = limpiar_texto_objeto(texto_p1, max_palabras=5)
         nombre_archivo_virtual = f"LiciPubli_{codigo_completo}_{objeto_camel}.pdf"
         
-        # Armar y guardar el archivo JSONL con el nuevo índice consecutivo
         salida = JSON_CHUNKS_DIR / f"licitaciones_part_{chunk_index}.jsonl"
         with open(salida, "w", encoding="utf-8") as f:
             for f_data in frags_finales:
@@ -185,35 +175,30 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
 # =========================================================
 
 def main():
-    # 1. Leer todas las URLs disponibles desde el archivo estático
     todas_las_urls = cargar_urls_pendientes()
     if not todas_las_urls:
         return
 
-    # 2. Detectar el progreso actual contando los archivos .jsonl existentes
-    chunks_procesados_count = get_processed_count()
-    print(f"[INFO] Total de URLs registradas en LiciURL: {len(todas_las_urls)}")
-    print(f"[INFO] Cantidad de licitaciones ya procesadas (chunks): {chunks_procesados_count}")
+    # Iniciar ciclo de procesamiento continuo
+    while True:
+        chunks_procesados_count = get_processed_count()
+        
+        # Condición de salida si se terminaron todas las URLs listadas
+        if chunks_procesados_count >= len(todas_las_urls):
+            print("\n[INFO] No hay nuevas licitaciones para procesar. Todas las URLs completadas.")
+            break
 
-    # 3. Determinar el índice de la próxima URL a procesar
-    # Si chunks_procesados_count es 0, empieza de la URL index 0. 
-    # Si es 5, saltará las posiciones 0,1,2,3,4 y procesará la posición 5.
-    if chunks_procesados_count >= len(todas_las_urls):
-        print("\n[INFO] No hay nuevas licitaciones para procesar.")
-        return
-
-    url_objetivo = todas_las_urls[chunks_procesados_count]
-    codigo_licitacion = extraer_codigo_de_url(url_objetivo)
-    
-    print(f"[INFO] Reanudando ejecución en URL índice [{chunks_procesados_count}]: {url_objetivo}")
-    
-    # 4. Procesar de forma incremental la licitación actual asignándole su índice secuencial correspondiente
-    exito = procesar_y_guardar_pdf(url_objetivo, codigo_licitacion, chunks_procesados_count)
-    
-    if exito:
-        print("[OK] Proceso completado para la ejecución actual.")
-    else:
-        print("[ERROR] No se pudo procesar la licitación actual.")
+        url_objetivo = todas_las_urls[chunks_procesados_count]
+        codigo_licitacion = extraer_codigo_de_url(url_objetivo)
+        
+        print(f"\n[PROCESO] Procesando elemento [{chunks_procesados_count + 1}/{len(todas_las_urls)}]")
+        print(f"[INFO] URL: {url_objetivo}")
+        
+        exito = procesar_y_guardar_pdf(url_objetivo, codigo_licitacion, chunks_procesados_count)
+        
+        if not exito:
+            print(f"[ALERTA] Deteniendo ejecución continua debido a un error en el índice {chunks_procesados_count}.")
+            break
 
 
 if __name__ == "__main__":
