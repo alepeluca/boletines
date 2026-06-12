@@ -227,7 +227,7 @@ def main():
         
         for xxx_int in range(start_xxx, 1000):
             xxx_str = f"{xxx_int:03d}"
-            start_z = siguiente_z if (anio_int == suficiente_anio:=siguiente_anio and xxx_int == start_xxx) else 1
+            start_z = siguiente_z if (anio_int == siguiente_anio and xxx_int == start_xxx) else 1
             
             encontrado_en_este_numero = False
             
