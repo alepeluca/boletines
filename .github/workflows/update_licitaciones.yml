@@ -18,7 +18,6 @@ jobs:
       with:
         python-version: '3.10'
 
-    # REGLA CLAVE: Instalar el motor Tesseract nativo de Linux y sus diccionarios en español
     - name: Instalar Tesseract OCR en el sistema operativo
       run: |
         sudo apt-get update
@@ -27,14 +26,15 @@ jobs:
     - name: Instalar librerías necesarias de Python
       run: |
         python -m pip install --upgrade pip
-        pip install pymupdf requests pytesseract pdf2image
+        pip install pymupdf requests pytesseract Pillow
 
-    - name: Ejecutar script de licitaciones
+    - name: Ejecutar script de licitaciones masivo
       run: python scripts/update_licitaciones.py
 
-    - name: Guardar cambios y subir al repositorio
+    - name: Guardar cambios y subir los chunks al repositorio
+      if: always() # Guarda el progreso acumulado INCLUSO si la corrida se interrumpe por límite de tiempo
       run: |
         git config --global user.name "GitHub Actions Bot"
         git config --global user.email "actions@github.com"
         git add json_chunks/
-        git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 Auto-update: Nuevo chunk de licitación procesado con OCR" && git push)
+        git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 Auto-update: Chunks del lote de licitaciones agregados" && git push)
