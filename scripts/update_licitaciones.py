@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-update_licitaciones.py — Versión 2.0.0
+update_licitaciones.py — Versión 2.0.1
 
 FLUJO:
 1. Detecta el último chunk existente de licitaciones (licitaciones_part_*.jsonl).
@@ -95,15 +95,17 @@ def load_last_licitacion_state(chunk_path):
     
     return anio_int, xxx_int, z_int, True
 
-
 def verificar_existencia_url(url):
-    """Verifica si la URL existe mediante HEAD."""
     try:
-        response = requests.head(url, headers=HEADERS, timeout=10)
+        response = requests.get(
+            url,
+            headers=HEADERS,
+            stream=True,
+            timeout=10
+        )
         return response.status_code == 200
     except requests.RequestException:
         return False
-
 
 def limpiar_texto_objeto(texto_completo, max_palabras=5):
     """Busca 'OBJETO:' en el texto del OCR, toma la línea y extrae N palabras en CamelCase."""
@@ -234,16 +236,21 @@ def main():
                 url_prueba = f"{BASE_URL}{codigo_licitacion}.pdf"
                 
                 print(f"Probando: {codigo_licitacion}.pdf ... ", end="", flush=True)
-                
+
                 if verificar_existencia_url(url_prueba):
                     print("¡EXISTE!")
-                    exito = procesar_y_guardar_pdf(url_prueba, codigo_licitacion, chunk_index_nuevo)
+                
+                    encontrado_en_este_numero = True
+                
+                    exito = procesar_y_guardar_pdf(
+                        url_prueba,
+                        codigo_licitacion,
+                        chunk_index_nuevo
+                    )
+                
                     if exito:
-                        return # Descarga incremental: frena al procesar exitosamente un archivo
-                else:
-                    print("no existe")
-                    break # Rompe Z si la primera variante no existe
-            
+                        return
+                           
             # Control de saltos de secuencia anuales
             if start_z == 1 and not encontrado_en_este_numero:
                 if xxx_str == "001":
