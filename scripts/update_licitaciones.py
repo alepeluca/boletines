@@ -2,15 +2,16 @@
 # -*- coding: utf-8 -*-
 
 """
-update_licitaciones.py — Versión 2.0.1
+update_licitaciones.py — Versión 3.0.0
 
 FLUJO:
-1. Detecta el último chunk existente de licitaciones (licitaciones_part_*.jsonl).
-2. Lee la última línea para calcular la posición exacta de reinicio.
-3. Descarga de forma incremental el siguiente PDF válido usando range inverso de años (26 al 00).
-4. Aplica Tesseract OCR de forma OBLIGATORIA a todas las páginas.
-5. Busca "OBJETO:" en la primera página procesada por el OCR, toma 5 palabras en CamelCase.
-6. Guarda el nuevo chunk indexado con el formato de ID y archivo requerido.
+1. Lee todas las URLs del archivo estático 'LiciURL' de la raíz.
+2. Cuenta cuántos archivos 'licitaciones_part_*.jsonl' ya existen en 'json_chunks/'.
+3. Dado que cada archivo JSONL representa exactamente una licitación procesada de forma secuencial,
+   el script reanuda salteándose las primeras N URLs (donde N es la cantidad de chunks existentes).
+4. Descarga la siguiente URL pendiente, ejecuta OCR obligatorio en todas sus páginas usando Tesseract.
+5. Busca "OBJETO:" en la primera página, extrae hasta 5 palabras para armar CamelCase.
+6. Guarda el resultado en un nuevo chunk incremental 'licitaciones_part_N.jsonl'.
 """
 
 import json
@@ -25,11 +26,11 @@ from pdf2image import convert_from_bytes
 # CONFIG
 # =========================================================
 
-VERSION = "2.0.0"
+VERSION = "3.0.0"
 FECHA_MODIFICACION = "12-06-2026"
 
 JSON_CHUNKS_DIR = Path("json_chunks")
-BASE_URL = "https://quilmes.gov.ar/contrataciones/licpublicas/"
+LICI_URL_FILE = Path("LiciURL")
 
 HEADERS = {
     "User-Agent": (
@@ -51,82 +52,64 @@ print("=" * 60 + "\n")
 # HELPERS
 # =========================================================
 
-def find_latest_chunk():
-    archivos = []
+def get_processed_count():
+    """
+    Cuenta cuántos archivos JSONL válidos e indexados existen en la carpeta json_chunks.
+    Cada archivo corresponde exactamente a una licitación ya procesada de forma secuencial.
+    """
+    contador = 0
     for f in JSON_CHUNKS_DIR.glob("licitaciones_part_*.jsonl"):
         match = re.search(r"licitaciones_part_(\d+)\.jsonl", f.name)
         if match:
-            archivos.append((int(match.group(1)), f))
-    if not archivos:
-        return -1, None
-    archivos.sort(key=lambda x: x[0])
-    return archivos[-1]
+            contador += 1
+    return contador
 
 
-def load_last_licitacion_state(chunk_path):
+def cargar_urls_pendientes():
     """
-    Retorna el estado de la última licitación del último chunk: (anio_int, xxx_int, z_int, hubo_exito_en_anio)
-    Si el chunk no existe, inicializa en el año 26, número 1, z 0.
+    Lee el archivo LiciURL y devuelve una lista limpia de todas las URLs.
     """
-    ultima_linea = None
-    if not chunk_path:
-        return 26, 1, 0, False
-
-    with open(chunk_path, "r", encoding="utf-8") as f:
+    if not LICI_URL_FILE.exists():
+        print(f"[ERROR] No se encontró el archivo de origen '{LICI_URL_FILE.name}' en la raíz.")
+        return []
+    
+    urls = []
+    with open(LICI_URL_FILE, "r", encoding="utf-8") as f:
         for linea in f:
             linea = linea.strip()
-            if linea:
-                ultima_linea = linea
+            if linea and linea.startswith("http"):
+                urls.append(linea)
+    return urls
 
-    if not ultima_linea:
-        return 26, 1, 0, False
 
-    obj = json.loads(ultima_linea)
-    archivo_id = obj.get("id", "")
-    
-    # Extraer el código XXXYY0-Z del ID guardado
-    match = re.search(r"LiciPubli_(\d{3})(\d{2})0-(\d)_", archivo_id)
-    if not match:
-        return 26, 1, 0, False
+def extraer_codigo_de_url(url):
+    """
+    Extrae el patrón de código XXXYY0-Z de la URL.
+    Ejemplo: https://.../001220-1.pdf -> 001220-1
+    """
+    match = re.search(r"(\d{3}\d{2}0-\d)", url)
+    if match:
+        return match.group(1)
+    # Fallback si por alguna razón la URL no sigue el patrón estricto
+    return "000000-0"
 
-    xxx_int = int(match.group(1))
-    anio_int = int(match.group(2))
-    z_int = int(match.group(3))
-    
-    return anio_int, xxx_int, z_int, True
-
-def verificar_existencia_url(url):
-    try:
-        response = requests.get(
-            url,
-            headers=HEADERS,
-            stream=True,
-            timeout=10
-        )
-        return response.status_code == 200
-    except requests.RequestException:
-        return False
 
 def limpiar_texto_objeto(texto_completo, max_palabras=5):
     """Busca 'OBJETO:' en el texto del OCR, toma la línea y extrae N palabras en CamelCase."""
     if "OBJETO:" not in texto_completo:
         return "SinObjeto"
     
-    # Extraer el contenido después de OBJETO:
     partes = texto_completo.split("OBJETO:", 1)
     if len(partes) < 2:
         return "SinObjeto"
         
     parte_objeto = partes[1].strip()
-    # Tomar la primera línea significativa
     lineas_objeto = parte_objeto.split("\n")
     primera_linea = lineas_objeto[0].strip() if lineas_objeto else ""
     
-    # Remover caracteres especiales y quedarse con letras/números
     limpio = re.sub(r'[^\w\s]', '', primera_linea)
     palabras = limpio.split()
     
-    # Filtrar y capitalizar para armar CamelCase
     palabras_filtradas = [p for p in palabras if len(p) > 1 or p.lower() in ['de', 'en', 'la', 'lo']]
     palabras_finales = palabras_filtradas[:max_palabras]
     
@@ -139,8 +122,12 @@ def limpiar_texto_objeto(texto_completo, max_palabras=5):
 def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
     """Descarga el PDF y le aplica OCR obligatorio a todas sus páginas."""
     print(f"[INFO] Descargando pliego: {url}")
-    response = requests.get(url, headers=HEADERS, timeout=20)
-    response.raise_for_status()
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=30)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"[ERROR] No se pudo descargar el archivo: {e}")
+        return False
 
     print("[INFO] Iniciando conversión a imagen para procesamiento OCR obligatorio...")
     frags_finales = []
@@ -153,7 +140,7 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
         for i, imagen in enumerate(paginas_imagenes, start=1):
             print(f"[OCR] Procesando página {i}/{len(paginas_imagenes)}...")
             
-            # Forzar ejecución de Tesseract en español
+            # Forzar ejecución de Tesseract en idioma español
             texto_extraido = pytesseract.image_to_string(imagen, lang='spa').strip()
             
             if i == 1:
@@ -166,7 +153,7 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
                 })
                 
     except Exception as e:
-        print(f"[ERROR] Falló el motor de Tesseract: {e}")
+        print(f"[ERROR] Falló el motor de Tesseract / pdf2image: {e}")
         return False
 
     if frags_finales:
@@ -174,7 +161,7 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
         objeto_camel = limpiar_texto_objeto(texto_p1, max_palabras=5)
         nombre_archivo_virtual = f"LiciPubli_{codigo_completo}_{objeto_camel}.pdf"
         
-        # Armar y guardar el archivo JSONL
+        # Armar y guardar el archivo JSONL con el nuevo índice consecutivo
         salida = JSON_CHUNKS_DIR / f"licitaciones_part_{chunk_index}.jsonl"
         with open(salida, "w", encoding="utf-8") as f:
             for f_data in frags_finales:
@@ -189,7 +176,7 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
         print(f"[OK] Chunk generado con OCR obligatorio: {salida.name} -> {nombre_archivo_virtual}")
         return True
 
-    print(f"[ERROR] No se pudo leer texto en el documento {url}")
+    print(f"[ERROR] No se pudo extraer texto legible mediante OCR del documento {url}")
     return False
 
 
@@ -198,72 +185,36 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
 # =========================================================
 
 def main():
-    last_idx, last_chunk = find_latest_chunk()
+    # 1. Leer todas las URLs disponibles desde el archivo estático
+    todas_las_urls = cargar_urls_pendientes()
+    if not todas_las_urls:
+        return
+
+    # 2. Detectar el progreso actual contando los archivos .jsonl existentes
+    chunks_procesados_count = get_processed_count()
+    print(f"[INFO] Total de URLs registradas en LiciURL: {len(todas_las_urls)}")
+    print(f"[INFO] Cantidad de licitaciones ya procesadas (chunks): {chunks_procesados_count}")
+
+    # 3. Determinar el índice de la próxima URL a procesar
+    # Si chunks_procesados_count es 0, empieza de la URL index 0. 
+    # Si es 5, saltará las posiciones 0,1,2,3,4 y procesará la posición 5.
+    if chunks_procesados_count >= len(todas_las_urls):
+        print("\n[INFO] No hay nuevas licitaciones para procesar.")
+        return
+
+    url_objetivo = todas_las_urls[chunks_procesados_count]
+    codigo_licitacion = extraer_codigo_de_url(url_objetivo)
     
-    # Calcular el estado inicial de búsqueda
-    anio_actual, xxx_actual, z_actual, hubo_exito_previo = load_last_licitacion_state(last_chunk)
+    print(f"[INFO] Reanudando ejecución en URL índice [{chunks_procesados_count}]: {url_objetivo}")
     
-    # Determinar los siguientes índices a probar basados en dónde quedó el último JSONL
-    if z_actual > 0 and z_actual < 6:
-        siguiente_anio = anio_actual
-        siguiente_xxx = xxx_actual
-        siguiente_z = z_actual + 1
+    # 4. Procesar de forma incremental la licitación actual asignándole su índice secuencial correspondiente
+    exito = procesar_y_guardar_pdf(url_objetivo, codigo_licitacion, chunks_procesados_count)
+    
+    if exito:
+        print("[OK] Proceso completado para la ejecución actual.")
     else:
-        siguiente_anio = anio_actual
-        siguiente_xxx = xxx_actual + 1 if last_chunk else 1
-        siguiente_z = 1
+        print("[ERROR] No se pudo procesar la licitación actual.")
 
-    chunk_index_nuevo = last_idx + 1
-    
-    print(f"[INFO] Último chunk procesado: {last_idx}")
-    print(f"[INFO] Buscando próximo elemento a partir de Año: 20{siguiente_anio:02d}, Número: {siguiente_xxx:03d}, Z: {siguiente_z}")
-
-    # Iterar años hacia el pasado
-    for anio_int in range(siguiente_anio, -1, -1):
-        anio_str = f"{anio_int:02d}"
-        
-        start_xxx = siguiente_xxx if anio_int == siguiente_anio else 1
-        hubo_licitaciones_en_este_anio = hubo_exito_previo if anio_int == siguiente_anio else False
-        
-        for xxx_int in range(start_xxx, 1000):
-            xxx_str = f"{xxx_int:03d}"
-            start_z = siguiente_z if (anio_int == siguiente_anio and xxx_int == start_xxx) else 1
-            
-            encontrado_en_este_numero = False
-            
-            for z in range(start_z, 7):
-                codigo_licitacion = f"{xxx_str}{anio_str}0-{z}"
-                url_prueba = f"{BASE_URL}{codigo_licitacion}.pdf"
-                
-                print(f"Probando: {codigo_licitacion}.pdf ... ", end="", flush=True)
-
-                if verificar_existencia_url(url_prueba):
-                    print("¡EXISTE!")
-                
-                    encontrado_en_este_numero = True
-                
-                    exito = procesar_y_guardar_pdf(
-                        url_prueba,
-                        codigo_licitacion,
-                        chunk_index_nuevo
-                    )
-                
-                    if exito:
-                        return
-                           
-            # Control de saltos de secuencia anuales
-            if start_z == 1 and not encontrado_en_este_numero:
-                if xxx_str == "001":
-                    print(f"[AVISO] Licitación inicial 001 de 20{anio_str} no existe. Saltando de año...")
-                    break
-                elif hubo_licitaciones_en_este_anio:
-                    print(f"[FIN DE PERÍODO] Fin de secuencia correlativa para 20{anio_str}. Saltando de año...")
-                    break
-                    
-        siguiente_z = 1
-        siguiente_xxx = 1
-
-    print("[INFO] No se encontraron nuevas licitaciones disponibles para procesar.")
 
 if __name__ == "__main__":
     main()
