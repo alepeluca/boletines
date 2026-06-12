@@ -2,19 +2,22 @@
 # -*- coding: utf-8 -*-
 
 """
-update_licitaciones.py — Versión 3.2.0
+update_licitaciones.py — Versión 4.0.0
 
-FLUJO CONTINUO CORREGIDO:
+FLUJO INCREMENTAL ROBUSTO:
 1. Lee todas las URLs del archivo estático 'LiciURL' de la raíz.
-2. Al iniciar, cuenta cuántos chunks históricos existen en la carpeta para saber dónde retomar.
-3. Avanza de forma secuencial usando un índice numérico en memoria interna, evitando
-   el bucle infinito causado por la falta de persistencia inmediata en el disco de GitHub.
-4. Genera los chunks incrementales correctamente (licitaciones_part_0, _1, _2, etc.).
+2. Calcula el próximo índice numérico real buscando el número máximo de chunk existente.
+3. Toma la URL correspondiente a ese índice y procesa UN SOLO archivo por corrida.
+4. Valida rigurosamente que las cabeceras de respuesta correspondan a un archivo PDF.
+5. Ejecuta Tesseract OCR obligatorio en todas las páginas (idioma español).
+6. Utiliza expresiones regulares insensibles a mayúsculas/minúsculas para extraer el OBJETO.
+7. Guarda un JSONL enriquecido con metadatos nativos (codigo, url, procesado, id, fragmento).
 """
 
 import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 import requests
 import pytesseract
@@ -24,7 +27,7 @@ from pdf2image import convert_from_bytes
 # CONFIG
 # =========================================================
 
-VERSION = "3.2.0"
+VERSION = "4.0.0"
 FECHA_MODIFICACION = "12-06-2026"
 
 JSON_CHUNKS_DIR = Path("json_chunks")
@@ -50,17 +53,22 @@ print("=" * 60 + "\n")
 # HELPERS
 # =========================================================
 
-def get_initial_processed_count():
+def get_next_chunk_index():
     """
-    Cuenta los archivos JSONL existentes únicamente al arrancar el script
-    para determinar el punto de partida inicial.
+    Busca el número de índice máximo real entre los archivos jsonl existentes
+    para evitar problemas si faltan archivos intermedios en la secuencia.
+    Devuelve el número siguiente libre.
     """
-    contador = 0
+    indices = []
     for f in JSON_CHUNKS_DIR.glob("licitaciones_part_*.jsonl"):
         match = re.search(r"licitaciones_part_(\d+)\.jsonl", f.name)
         if match:
-            contador += 1
-    return contador
+            indices.append(int(match.group(1)))
+            
+    if not indices:
+        return 0
+        
+    return max(indices) + 1
 
 
 def cargar_urls_pendientes():
@@ -82,30 +90,35 @@ def cargar_urls_pendientes():
 
 def extraer_codigo_de_url(url):
     """
-    Extrae el patrón de código XXXYY0-Z de la URL.
+    Extrae el patrón de código flexible de la URL.
+    Soporta formatos estándar y variantes numéricas de licitaciones con guion.
+    Ejemplo: 001220-1 o 012260-2
     """
-    match = re.search(r"(\d{3}\d{2}0-\d)", url)
+    match = re.search(r"(\d{6}-\d+)", url)
     if match:
         return match.group(1)
     return "000000-0"
 
 
 def limpiar_texto_objeto(texto_completo, max_palabras=5):
-    """Busca 'OBJETO:' en el texto del OCR, toma la línea y extrae N palabras en CamelCase."""
-    if "OBJETO:" not in texto_completo:
-        return "SinObjeto"
-    
-    partes = texto_completo.split("OBJETO:", 1)
-    if len(partes) < 2:
+    """
+    Utiliza una expresión regular insensible a mayúsculas para capturar el OBJETO,
+    contemplando fallas comunes de lectura de Tesseract sobre los dos puntos (:).
+    """
+    match = re.search(r"OBJETO\s*[:;\-–—]?\s*(.+)", texto_completo, re.IGNORECASE)
+    if not match:
         return "SinObjeto"
         
-    parte_objeto = partes[1].strip()
-    lineas_objeto = parte_objeto.split("\n")
-    primera_linea = lineas_objeto[0].strip() if lineas_objeto else ""
+    primera_linea_objeto = match.group(1).strip()
+    # Aislar solo la primera línea en caso de que contenga saltos
+    lineas = primera_linea_objeto.split("\n")
+    texto_objeto = lineas[0].strip() if lineas else ""
     
-    limpio = re.sub(r'[^\w\s]', '', primera_linea)
+    # Remover caracteres especiales de control de archivos de sistema
+    limpio = re.sub(r'[^\w\s]', '', texto_objeto)
     palabras = limpio.split()
     
+    # Filtrar conectores y capitalizar para CamelCase
     palabras_filtradas = [p for p in palabras if len(p) > 1 or p.lower() in ['de', 'en', 'la', 'lo']]
     palabras_finales = palabras_filtradas[:max_palabras]
     
@@ -116,8 +129,14 @@ def limpiar_texto_objeto(texto_completo, max_palabras=5):
 
 
 def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
-    """Descarga el PDF y le aplica OCR obligatorio a todas sus páginas."""
+    """
+    Descarga el PDF, valida su Content-Type y le aplica OCR obligatorio 
+    a todas las páginas guardando la metadata enriquecida estructurada.
+    """
     print(f"[INFO] Descargando pliego: {url}")
+    print(f"[CODIGO] {codigo_completo}")
+    print(f"[URL] {url}")
+    
     try:
         response = requests.get(url, headers=HEADERS, timeout=30)
         response.raise_for_status()
@@ -125,7 +144,13 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
         print(f"[ERROR] No se pudo descargar el archivo: {e}")
         return False
 
-    print("[INFO] Iniciando conversión a imagen para procesamiento OCR obligatorio...")
+    # Validar que el archivo descargado sea efectivamente un documento PDF
+    content_type = response.headers.get("Content-Type", "").lower()
+    if "pdf" not in content_type:
+        print(f"[ERROR] El archivo descargado no es un PDF válido. Content-Type: {content_type}")
+        return False
+
+    print("[INFO] Iniciando conversión completa a imagen para procesamiento OCR obligatorio...")
     frags_finales = []
     texto_p1 = ""
 
@@ -134,6 +159,7 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
         
         for i, imagen in enumerate(paginas_imagenes, start=1):
             print(f"[OCR] Procesando página {i}/{len(paginas_imagenes)}...")
+            # Forzar ejecución de Tesseract en idioma español
             texto_extraido = pytesseract.image_to_string(imagen, lang='spa').strip()
             
             if i == 1:
@@ -152,22 +178,27 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
     if frags_finales:
         objeto_camel = limpiar_texto_objeto(texto_p1, max_palabras=5)
         nombre_archivo_virtual = f"LiciPubli_{codigo_completo}_{objeto_camel}.pdf"
+        timestamp_procesado = datetime.utcnow().isoformat()
         
+        # Generar el archivo JSONL incremental con toda la metadata unificada
         salida = JSON_CHUNKS_DIR / f"licitaciones_part_{chunk_index}.jsonl"
         with open(salida, "w", encoding="utf-8") as f:
             for f_data in frags_finales:
                 chunk_linea = {
-                    "id": f"{nombre_archivo_virtual}_p{f_data['pagina']}_f0",
+                    "codigo": codigo_completo,
+                    "url": url,
                     "archivo": nombre_archivo_virtual,
+                    "id": f"{nombre_archivo_virtual}_p{f_data['pagina']}_f0",
                     "pagina": f_data['pagina'],
-                    "fragmento": f_data['fragmento']
+                    "fragmento": f_data['fragmento'],
+                    "procesado": timestamp_procesado
                 }
                 f.write(json.dumps(chunk_linea, ensure_ascii=False) + "\n")
                 
-        print(f"[OK] Chunk generado con OCR obligatorio: {salida.name} -> {nombre_archivo_virtual}")
+        print(f"[OK] Chunk generado con éxito: {salida.name} -> {nombre_archivo_virtual}")
         return True
 
-    print(f"[ERROR] No se pudo extraer texto legible mediante OCR del documento {url}")
+    print(f"[ERROR] No se pudo extraer texto legible mediante OCR del documento.")
     return False
 
 
@@ -176,40 +207,33 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
 # =========================================================
 
 def main():
+    # 1. Cargar la lista completa de URLs estáticas
     todas_las_urls = cargar_urls_pendientes()
     if not todas_las_urls:
         return
 
-    # 1. Obtener el punto de partida inicial basándose en los archivos actuales en Git
-    punto_partida = get_initial_processed_count()
+    # 2. Calcular el próximo punto de ejecución real en base al índice máximo encontrado
+    proximo_indice_pendiente = get_next_chunk_index()
     print(f"[INFO] Total de URLs registradas en LiciURL: {len(todas_las_urls)}")
-    print(f"[INFO] Punto de partida inicial calculado: índice {punto_partida}")
+    print(f"[INFO] Cantidad de licitaciones ya procesadas: {proximo_indice_pendiente}")
 
-    if punto_partida >= len(todas_las_urls):
-        print("\n[INFO] No hay nuevas licitaciones para procesar. Todas las URLs completadas.")
+    # 3. Validar si quedan elementos por procesar en la lista
+    if proximo_indice_pendiente >= len(todas_las_urls):
+        print("\n[INFO] No hay nuevas licitaciones para procesar.")
         return
 
-    # 2. Control numérico mediante índice en memoria para el bucle continuo
-    indice_actual = punto_partida
-
-    while indice_actual < len(todas_las_urls):
-        url_objetivo = todas_las_urls[indice_actual]
-        codigo_licitacion = extraer_codigo_de_url(url_objetivo)
-        
-        print(f"\n[PROCESO] Procesando elemento [{indice_actual + 1}/{len(todas_las_urls)}]")
-        print(f"[INFO] URL: {url_objetivo}")
-        
-        exito = procesar_y_guardar_pdf(url_objetivo, codigo_licitacion, indice_actual)
-        
-        if not exito:
-            print(f"[ALERTA] Deteniendo ejecución continua debido a un problema con el índice {indice_actual}.")
-            break
-            
-        # Sumamos 1 de forma estricta en memoria para pasar a la siguiente URL en la próxima vuelta
-        indice_actual += 1
-
-    if indice_actual >= len(todas_las_urls):
-        print("\n[INFO] Se han procesado con éxito todos los elementos del archivo LiciURL.")
+    # 4. Aislar y ejecutar de forma incremental una única URL por corrida
+    url_objetivo = todas_las_urls[proximo_indice_pendiente]
+    codigo_licitacion = extraer_codigo_de_url(url_objetivo)
+    
+    print(f"\n[PROCESO] Iniciando ejecución para el elemento índice [{proximo_indice_pendiente}]")
+    
+    exito = procesar_y_guardar_pdf(url_objetivo, codigo_licitacion, proximo_indice_pendiente)
+    
+    if exito:
+        print("[OK] Ejecución incremental finalizada correctamente de a un archivo.")
+    else:
+        print("[ERROR] La ejecución actual falló al procesar el elemento.")
 
 
 if __name__ == "__main__":
