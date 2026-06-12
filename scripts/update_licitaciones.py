@@ -2,23 +2,23 @@
 # -*- coding: utf-8 -*-
 
 """
-update_licitaciones.py — Versión 4.1.1
+update_licitaciones.py — Versión 5.0.0
 
-FLUJO INCREMENTAL ROBUSTO (OPTIMIZADO PARA MEMORIA):
+FLUJO MASIVO CONTINUO (OPTIMIZADO PARA LOTES GRANDES):
 1. Lee todas las URLs del archivo estático 'LiciURL' de la raíz.
-2. Calcula el próximo índice numérico real buscando el número máximo de chunk existente.
-3. Toma la URL correspondiente a ese índice y procesa UN SOLO archivo por corrida.
-4. Valida rigurosamente que las cabeceras de respuesta correspondan a un archivo PDF.
-5. Utiliza PyMuPDF (fitz) para renderizar el PDF hoja por hoja de forma secuencial,
-   evitando desbordamientos de memoria RAM en GitHub Actions.
-6. Ejecuta Tesseract OCR obligatorio en cada página procesada (idioma español).
-7. Guarda un JSONL enriquecido con metadatos nativos (codigo, url, archivo, id, fragmento).
+2. Calcula el punto de partida inicial en memoria.
+3. Procesa de forma continua en un bucle 'while' todas las URLs pendientes.
+4. Utiliza PyMuPDF (fitz) para renderizar hoja por hoja liberando RAM en cada paso.
+5. Aplica Tesseract OCR obligatorio en idioma español.
+6. Guarda de manera inmediata cada nuevo chunk indexado en 'json_chunks/'.
 """
 
 import json
 import os
 import re
 import io
+import time
+import random
 from datetime import datetime
 from pathlib import Path
 import requests
@@ -30,7 +30,7 @@ from PIL import Image
 # CONFIG
 # =========================================================
 
-VERSION = "4.1.0"
+VERSION = "5.0.0"
 FECHA_MODIFICACION = "12-06-2026"
 
 JSON_CHUNKS_DIR = Path("json_chunks")
@@ -56,10 +56,10 @@ print("=" * 60 + "\n")
 # HELPERS
 # =========================================================
 
-def get_next_chunk_index():
+def get_initial_processed_count():
     """
     Busca el número de índice máximo real entre los archivos jsonl existentes
-    para evitar problemas si faltan archivos intermedios en la secuencia.
+    al arrancar para saber exactamente en qué posición de la lista retomar.
     """
     indices = []
     for f in JSON_CHUNKS_DIR.glob("licitaciones_part_*.jsonl"):
@@ -151,25 +151,20 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
     texto_p1 = ""
 
     try:
-        # Abrimos el documento de forma directa usando fitz desde los bytes en memoria
         with fitz.open(stream=response.content, filetype="pdf") as doc:
             total_paginas = len(doc)
-            print(f"[INFO] Total de páginas detectadas de forma nativa: {total_paginas}")
+            print(f"[INFO] Total de páginas detectadas: {total_paginas}")
             
-            # Iteramos página por página de forma secuencial
             for index_pag in range(total_paginas):
                 numero_pagina_real = index_pag + 1
                 print(f"[OCR] Procesando página {numero_pagina_real}/{total_paginas}...")
                 
-                # Cargamos la página aislada y la renderizamos a una matriz de pixeles (150 DPI)
                 page = doc[index_pag]
                 pix = page.get_pixmap(dpi=150)
                 
-                # Convertimos los pixeles a bytes PNG e inicializamos el objeto de imagen PIL
                 img_bytes = pix.tobytes("png")
                 imagen_pil = Image.open(io.BytesIO(img_bytes))
                 
-                # Ejecutamos Tesseract sobre la imagen de la página actual
                 texto_extraido = pytesseract.image_to_string(imagen_pil, lang='spa').strip()
                 
                 if numero_pagina_real == 1:
@@ -181,7 +176,6 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
                         "fragmento": texto_extraido
                     })
                     
-                # Liberamos memoria explícitamente en cada ciclo de página
                 pix = None
                 imagen_pil.close()
                 
@@ -194,7 +188,6 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
         nombre_archivo_virtual = f"LiciPubli_{codigo_completo}_{objeto_camel}.pdf"
         timestamp_procesado = datetime.utcnow().isoformat()
         
-        # Guardar el archivo JSONL incremental
         salida = JSON_CHUNKS_DIR / f"licitaciones_part_{chunk_index}.jsonl"
         with open(salida, "w", encoding="utf-8") as f:
             for f_data in frags_finales:
@@ -225,25 +218,36 @@ def main():
     if not todas_las_urls:
         return
 
-    proximo_indice_pendiente = get_next_chunk_index()
+    # 1. Obtener el punto de partida inicial basándose en los archivos actuales en Git
+    indice_actual = get_initial_processed_count()
     print(f"[INFO] Total de URLs registradas en LiciURL: {len(todas_las_urls)}")
-    print(f"[INFO] Cantidad de licitaciones ya procesadas: {proximo_indice_pendiente}")
+    print(f"[INFO] Punto de partida inicial calculado: índice {indice_actual}")
 
-    if proximo_indice_pendiente >= len(todas_las_urls):
-        print("\n[INFO] No hay nuevas licitaciones para procesar.")
+    if indice_actual >= len(todas_las_urls):
+        print("\n[INFO] No hay nuevas licitaciones para procesar. Todas las URLs completadas.")
         return
 
-    url_objetivo = todas_las_urls[proximo_indice_pendiente]
-    codigo_licitacion = extraer_codigo_de_url(url_objetivo)
-    
-    print(f"\n[PROCESO] Iniciando ejecución para el elemento índice [{proximo_indice_pendiente}]")
-    
-    exito = procesar_y_guardar_pdf(url_objetivo, codigo_licitacion, proximo_indice_pendiente)
-    
-    if exito:
-        print("[OK] Ejecución incremental finalizada correctamente de a un archivo.")
-    else:
-        print("[ERROR] La ejecución actual falló al procesar el elemento.")
+    # 2. Procesamiento masivo continuo controlado por memoria
+    while indice_actual < len(todas_las_urls):
+        url_objetivo = todas_las_urls[indice_actual]
+        codigo_licitacion = extraer_codigo_de_url(url_objetivo)
+        
+        print(f"\n[PROCESO] Procesando elemento [{indice_actual + 1}/{len(todas_las_urls)}]")
+        
+        exito = procesar_y_guardar_pdf(url_objetivo, codigo_licitacion, indice_actual)
+        
+        if not exito:
+            print(f"[ALERTA] Deteniendo ejecución debido a un problema con el índice {indice_actual}.")
+            break
+            
+        # Avanzar a la siguiente URL en memoria de forma inmediata
+        indice_actual += 1
+        
+        # Una pequeña pausa de cortesía para no saturar al servidor municipal
+        time.sleep(random.uniform(1.0, 2.5))
+
+    if indice_actual >= len(todas_las_urls):
+        print("\n[INFO] Se han procesado con éxito todos los elementos del archivo LiciURL.")
 
 
 if __name__ == "__main__":
