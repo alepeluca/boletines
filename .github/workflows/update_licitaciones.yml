@@ -1,8 +1,6 @@
 name: Actualización Diaria de Licitaciones
 
 on:
-  schedule:
-    - cron: '0 4 * * *'
   workflow_dispatch:
 
 jobs:
