@@ -1,0 +1,42 @@
+name: Actualización Diaria de Licitaciones
+
+on:
+  schedule:
+    # Corre automáticamente todas las noches a la 01:00 AM hora de Argentina (04:00 UTC)
+    - cron: '0 4 * * *'
+  workflow_dispatch: # Permite que aprietes el botón gris para lanzarlo cuando quieras
+
+jobs:
+  run-updater:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Clonar el repositorio
+      uses: actions/checkout@v4
+
+    - name: Configurar entorno de Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Instalar Tesseract OCR en el sistema operativo
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y tesseract-ocr tesseract-ocr-spa
+
+    - name: Instalar librerías necesarias de Python
+      run: |
+        python -m pip install --upgrade pip
+        pip install pymupdf requests pytesseract Pillow
+
+    - name: Ejecutar Vigilancia Activa de Licitaciones
+      env:
+        PYTHONUNBUFFERED: "1"
+      run: python scripts/update_lici_dia.py
+
+    - name: Guardar nuevos chunks descubiertos en el repositorio
+      run: |
+        git config --global user.name "GitHub Actions Bot"
+        git config --global user.email "actions@github.com"
+        git add json_chunks/
+        git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 Alerta: Nuevas licitaciones agregadas por vigilancia diaria" && git push)
