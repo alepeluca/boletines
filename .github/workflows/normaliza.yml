@@ -1,0 +1,38 @@
+name: Normalizar Nombres de Chunks de Licitaciones
+
+on:
+  workflow_dispatch: # Te permite ejecutarlo manualmente con un botón desde la pestaña Actions de GitHub
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Descargar el código actual del repositorio
+    - name: Checkout del repositorio
+      uses: actions/checkout@v4
+
+    # 2. Configurar el entorno de Python
+    - name: Configurar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    # 3. Ejecutar el script que limpia y renombra a formato NNNN
+    - name: Ejecutar script de normalización
+      run: python normalizar_licitaciones.py
+
+    # 4. Guardar los archivos renombrados de vuelta en GitHub
+    - name: Commitear y pushear cambios normalizados
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        
+        git add json_chunks/
+        
+        if git diff --staged --quiet; then
+          echo "No se encontraron archivos para normalizar."
+        else
+          git commit -m "Automatización: normalización masiva de chunks de licitaciones (formato NNNN)"
+          git push
+        fi
