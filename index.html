@@ -2,16 +2,31 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Buscador de Boletines</title>
+  <title>Buscador Integrado Municipal</title>
   <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Mohave', sans-serif; margin: 2rem auto; max-width: 1200px; background: #f0f0f0; display: flex; flex-direction: column; align-items: center; }
     #ultimaActualizacion { font-weight: bold; margin-bottom: 1rem; }
     #searchContainer, #dateContainer { width: 100%; max-width: 900px; margin-bottom: 1rem; }
-    #searchOptions { display: flex; gap: 1rem; margin-bottom: 1rem; justify-content: center; }
+    #searchOptions, #categoryOptions { display: flex; gap: 1rem; margin-bottom: 1rem; justify-content: center; flex-wrap: wrap; }
+    #categoryOptions { background: #e2e8f0; padding: 0.7rem; border-radius: 8px; border: 1px solid #cbd5e1; }
     #resultados { width: 90%; max-width: 1200px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; max-height: 500px; overflow-y: auto; }
+    
+    /* Colores distintivos de bordes por categoría */
     .resultado { border: 2px solid blue; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; cursor: pointer; }
+    .resultado.licitacion { border-color: #e67e22; }
+    .resultado.hcd_orden { border-color: #2ecc71; }
+    .resultado.hcd_taqui { border-color: #9b59b6; }
+    
     .linea { font-weight: bold; margin-bottom: .5rem; }
+    
+    /* Estilos de etiquetas (Badges) */
+    .badge { display: inline-block; padding: 0.2rem 0.5rem; font-size: 0.8rem; border-radius: 4px; color: #fff; margin-right: 0.5rem; text-transform: uppercase; }
+    .badge-boletin { background-color: blue; }
+    .badge-lici { background-color: #e67e22; }
+    .badge-orden { background-color: #2ecc71; }
+    .badge-taqui { background-color: #9b59b6; }
+    
     .fragmento { white-space: pre-wrap; }
     #pdfPreview { width: 100%; max-width: 900px; min-height: 600px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; }
     #pdfPreview iframe { width: 100%; height: 600px; border: none; }
@@ -25,6 +40,13 @@
   <div id="ultimaActualizacion">Cargando última actualización…</div>
 
   <div id="searchContainer">
+    <div id="categoryOptions">
+      <label><input type="checkbox" id="cat-boletines" value="boletines" checked> Boletines Oficiales</label>
+      <label><input type="checkbox" id="cat-licitaciones" value="licitaciones" checked> Licitaciones Públicas</label>
+      <label><input type="checkbox" id="cat-hcd-orden" value="hcd_orden" checked> HCD: Órdenes del Día</label>
+      <label><input type="checkbox" id="cat-hcd-taqui" value="hcd_taqui" checked> HCD: Taquigráficas</label>
+    </div>
+
     <div id="searchOptions">
       <label><input type="radio" name="searchType" value="contains" checked> Contiene</label>
       <label><input type="radio" name="searchType" value="endsWith"> Termina en</label>
@@ -48,7 +70,7 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V0.1.37</div>
+  <div id="version">V0.3.0</div>
 
 <script>
   const ultimaDiv = document.getElementById('ultimaActualizacion');
@@ -63,11 +85,50 @@
   const hastaInput = document.getElementById('hasta');
   const ordenSelect = document.getElementById('orden');
 
-  // 1) Detectar chunks
-  async function detectChunks() {
+  // Mapeo Centralizado de Configuración de las 4 Categorías
+  const CONFIG_CATEGORIAS = {
+    boletines: { 
+      prefix: 'boletines_part_', 
+      digits: 0, // 0 significa que no lleva relleno de ceros (ej: _1.jsonl, _2.jsonl)
+      label: 'Boletín', 
+      badgeClass: 'badge-boletin', 
+      resultClass: '',
+      pdfUrl: (num) => `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf`
+    },
+    licitaciones: { 
+      prefix: 'lici_part', 
+      digits: 4, // Estándar NNNN (ej: lici_part0001.jsonl)
+      label: 'Licitación', 
+      badgeClass: 'badge-lici', 
+      resultClass: 'licitacion',
+      pdfUrl: (num) => `https://quilmes.gov.ar/pdf/licitaciones/lici-${num}.pdf` // Ajustá si cambia la URL final del PDF
+    },
+    hcd_orden: { 
+      prefix: 'hcd_orden_part', 
+      digits: 4, // Estándar NNNN
+      label: 'HCD Orden del Día', 
+      badgeClass: 'badge-orden', 
+      resultClass: 'hcd_orden',
+      pdfUrl: (num) => `https://quilmes.gov.ar/pdf/hcd/orden-${num}.pdf` // Ajustá según tu servidor
+    },
+    hcd_taqui: { 
+      prefix: 'hcd_taqui_part', 
+      digits: 4, // Estándar NNNN
+      label: 'HCD Taquigráfica', 
+      badgeClass: 'badge-taqui', 
+      resultClass: 'hcd_taqui',
+      pdfUrl: (num) => `https://quilmes.gov.ar/pdf/hcd/taqui-${num}.pdf` // Ajustá según tu servidor
+    }
+  };
+
+  // 1) Detectar cuántos chunks reales existen de una categoría en la carpeta json_chunks/
+  async function detectChunks(key) {
+    const cat = CONFIG_CATEGORIAS[key];
     let n = 0;
     while(true) {
-      const url = `json_chunks/boletines_part_${n+1}.jsonl`;
+      // Si digits es 4 aplica padStart(4, '0'), si es 0 lo deja plano (ej: n+1)
+      const indexStr = cat.digits > 0 ? String(n + 1).padStart(cat.digits, '0') : (n + 1);
+      const url = `json_chunks/${cat.prefix}${indexStr}.jsonl`;
       try {
         const res = await fetch(url, { method: 'HEAD' });
         if (!res.ok) break;
@@ -77,9 +138,9 @@
     return n;
   }
 
-  // 2) Mostrar última actualización
+  // 2) Mostrar última actualización (Tomando Boletines como referencia de control)
   async function mostrarUltimaActualizacion() {
-    const total = await detectChunks();
+    const total = await detectChunks('boletines');
     if (total === 0) {
       ultimaDiv.textContent = 'Sin datos de actualización.';
       return;
@@ -99,16 +160,13 @@
     ultimaDiv.textContent = 'Sin datos de actualización.';
   }
 
-  // 3) Cargar PDF con fallback
+  // 3) Cargar PDF en el Visor Embebido (iFrame)
   async function cargarPDF(url) {
     pdfPreview.innerHTML = '<p>Cargando PDF…</p>';
     const clean = url.split('#')[0];
-    // Intento directo
     const iframe = document.createElement('iframe');
     iframe.src = clean;
-    iframe.onload = () => {}; 
     iframe.onerror = () => {
-      // Fallback Google Docs Viewer
       pdfPreview.innerHTML = `
         <iframe src="https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(clean)}"></iframe>
       `;
@@ -117,20 +175,42 @@
     pdfPreview.appendChild(iframe);
   }
 
-  // 4) Búsqueda
+  // Extractor inteligente del identificador numérico o nombre para armar el link del PDF
+  function extraerNumero(archivo, tipoKey) {
+    if (tipoKey === 'boletines') {
+      return (archivo.match(/boletin-(\d+)/)||[])[1]||'N/D';
+    }
+    // Para las nuevas categorías, busca extraer códigos numéricos o identificadores limpios
+    const match = archivo.match(/_([a-zA-Z0-9-]+)\./) || archivo.match(/([0-9]+[\d-]*)/);
+    return match ? match[1] : 'N/D';
+  }
+
+  // 4) Buscador Multicategoría Asincrónico
   async function realizarBusqueda() {
     const q = busquedaInput.value.trim();
     if (!q) {
       resultadosDiv.innerHTML = '<p>Ingresá texto para buscar.</p>';
       return;
     }
+
+    // Mapea cuáles de los 4 checkboxes están marcados por el usuario
+    const categoriasActivas = [];
+    if(document.getElementById('cat-boletines').checked) categoriasActivas.push('boletines');
+    if(document.getElementById('cat-licitaciones').checked) categoriasActivas.push('licitaciones');
+    if(document.getElementById('cat-hcd-orden').checked) categoriasActivas.push('hcd_orden');
+    if(document.getElementById('cat-hcd-taqui').checked) categoriasActivas.push('hcd_taqui');
+
+    if (categoriasActivas.length === 0) {
+      resultadosDiv.innerHTML = '<p>Seleccioná al menos una categoría para buscar.</p>';
+      return;
+    }
+
     statusDiv.textContent = 'Buscando…';
     resultadosDiv.innerHTML = '';
     contadorDiv.textContent = '';
     pdfPreview.innerHTML = '';
-    const total = await detectChunks();
-    progressBar.max = total||1;
-    let matches = [];
+
+    // Generar Expresión Regular de búsqueda
     let regex;
     const mode = document.querySelector('input[name="searchType"]:checked').value;
     try {
@@ -141,63 +221,110 @@
       statusDiv.textContent='Error regex';
       return;
     }
-    for (let i=1;i<=total;i++){
-      const text = await fetch(`json_chunks/boletines_part_${i}.jsonl`).then(r=>r.text());
-      for (let ln of text.split('\n')) {
-        if (!ln) continue;
-        try {
-          const obj = JSON.parse(ln);
-          if (regex.test(obj.fragmento)) matches.push(obj);
-        } catch{}
-      }
-      progressBar.value = i;
+
+    let matches = [];
+    let tareasDeteccion = [];
+
+    // Detectar dinámicamente la cantidad de chunks por cada categoría activa
+    for (let key of categoriasActivas) {
+      tareasDeteccion.push(detectChunks(key).then(total => ({ key, total })));
     }
+    
+    const infoChunks = await Promise.all(tareasDeteccion);
+    const granTotalChunks = infoChunks.reduce((acc, curr) => acc + curr.total, 0);
+    progressBar.max = granTotalChunks || 1;
+    
+    let chunksProcesados = 0;
+
+    // Procesar secuencialmente los archivos .jsonl mapeados
+    for (let info of infoChunks) {
+      const catKey = info.key;
+      const totalJsonls = info.total;
+      const catConfig = CONFIG_CATEGORIAS[catKey];
+
+      for (let i = 0; i < totalJsonls; i++) {
+        const indexStr = catConfig.digits > 0 ? String(i + 1).padStart(catConfig.digits, '0') : (i + 1);
+        const urlChunk = `json_chunks/${catConfig.prefix}${indexStr}.jsonl`;
+
+        try {
+          const text = await fetch(urlChunk).then(r => r.text());
+          for (let ln of text.split('\n')) {
+            if (!ln) continue;
+            try {
+              const obj = JSON.parse(ln);
+              if (regex.test(obj.fragmento)) {
+                obj.tipoCategoriaKey = catKey; // Seteamos la categoría origen al objeto resultado
+                matches.push(obj);
+              }
+            } catch{}
+          }
+        } catch(err) { console.error("Error leyendo chunk: " + urlChunk, err); }
+        
+        chunksProcesados++;
+        progressBar.value = chunksProcesados;
+      }
+    }
+
     statusDiv.textContent = '';
-    // Fecha filter
+
+    // Filtro por Rangos de Fecha
     const desde = desdeInput.value.replace(/-/g,'')+'01';
     const hasta = hastaInput.value.replace(/-/g,'')+'01';
-    if (desdeInput.value) matches = matches.filter(m=>m.archivo.slice(0,8)>=desde);
-    if (hastaInput.value) matches = matches.filter(m=>m.archivo.slice(0,8)<=hasta);
-    // Sort
-    matches.sort((a,b)=>{
-      const da = a.archivo.slice(0,8), db=b.archivo.slice(0,8);
-      return ordenSelect.value==='asc'?da.localeCompare(db):db.localeCompare(da);
+    if (desdeInput.value) matches = matches.filter(m => m.archivo.slice(0,8) >= desde);
+    if (hastaInput.value) matches = matches.filter(m => m.archivo.slice(0,8) <= hasta);
+
+    // Ordenar resultados según la fecha codificada en los primeros 8 caracteres de .archivo (YYYYMMDD)
+    matches.sort((a,b) => {
+      const da = a.archivo.slice(0,8), db = b.archivo.slice(0,8);
+      return ordenSelect.value === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
     });
+
     if (!matches.length) {
-      resultadosDiv.innerHTML='<p>No hay resultados.</p>';
-      contadorDiv.textContent='0 resultados';
+      resultadosDiv.innerHTML = '<p>No hay resultados.</p>';
+      contadorDiv.textContent = '0 resultados';
       return;
     }
-    contadorDiv.textContent=`${matches.length} resultados`;
-    // Mostrar primer PDF
+
+    contadorDiv.textContent = `${matches.length} resultados`;
+
+    // Cargar automáticamente en el visor el primer PDF de la lista
     const first = matches[0];
-    const num = (first.archivo.match(/boletin-(\d+)/)||[])[1];
-    cargarPDF(`https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${first.pagina}`);
-    // Mostrar lista
-    matches.forEach(m=>{
+    const firstNum = extraerNumero(first.archivo, first.tipoCategoriaKey);
+    const firstUrl = CONFIG_CATEGORIAS[first.tipoCategoriaKey].pdfUrl(firstNum);
+    cargarPDF(`${firstUrl}#page=${first.pagina}`);
+
+    // Renderizar la lista completa de coincidencias
+    matches.forEach(m => {
       const fechaRaw = m.archivo.slice(0,8),
             anno = fechaRaw.slice(0,4),
             mes = fechaRaw.slice(4,6),
             meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'],
             mesN = meses[parseInt(mes,10)-1]||mes,
-            num = (m.archivo.match(/boletin-(\d+)/)||[])[1],
+            num = extraerNumero(m.archivo, m.tipoCategoriaKey),
             pg = m.pagina;
+
+      const conf = CONFIG_CATEGORIAS[m.tipoCategoriaKey];
+      const urlDestinoPdf = conf.pdfUrl(num);
+
       const div = document.createElement('div');
-      div.className = 'resultado';
+      div.className = `resultado ${conf.resultClass}`; 
+
       div.innerHTML = `
         <div class="linea">
-          <a href="https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf" target="_blank">Boletín N.º ${num} – ${mesN} de ${anno}</a>
+          <span class="badge ${conf.badgeClass}">${conf.label}</span>
+          <a href="${urlDestinoPdf}" target="_blank">${conf.label} N.º ${num} – ${mesN} de ${anno}</a>
           (p. ${pg})
         </div>
         <div class="fragmento">${m.fragmento.replace(regex,'<mark>$&</mark>')}</div>
       `;
-      div.onclick = ()=> cargarPDF(`https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf#page=${pg}`);
+      
+      div.onclick = () => cargarPDF(`${urlDestinoPdf}#page=${pg}`);
       resultadosDiv.appendChild(div);
     });
   }
 
   botonBuscar.addEventListener('click', realizarBusqueda);
-  busquedaInput.addEventListener('keydown', e=>{ if(e.key==='Enter') realizarBusqueda(); });
+  busquedaInput.addEventListener('keydown', e => { if(e.key === 'Enter') realizarBusqueda(); });
 
   mostrarUltimaActualizacion();
 </script>
