@@ -35,7 +35,7 @@
 </head>
 <body>
 
-  <div id="ultimaActualizacion">Cargando estados de actualización…</div>
+  <div id="ultimaActualizacion">Sincronizando con base de datos remota…</div>
 
   <div id="searchContainer">
     <div id="categoryOptions">
@@ -71,11 +71,11 @@
     <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.8rem;">
       <label>Filtrar Año: <select id="descFiltroAnno"><option value="TODOS">Todos los años</option></select></label>
       <label><input type="checkbox" id="descDesagregarMensual" checked> Desagregar meses</label>
-      <span id="descCargandoStatus" style="font-size:0.85rem; color:#666; font-style:italic;">Generando índice automático…</span>
+      <span id="descCargandoStatus" style="font-size:0.85rem; color:#666; font-style:italic;">Analizando repositorios…</span>
     </div>
     
     <div id="descContenedorEnlaces" style="max-height: 200px; overflow-y: auto; padding: 0.5rem; border: 1px dashed #ccc; border-radius: 4px; background: #fafafa; display: flex; flex-direction: column; gap: 0.6rem;">
-      <span style="color:#888; font-size:0.85rem; font-style:italic; text-align:center;">Cargando calendario de descargas…</span>
+      <span style="color:#888; font-size:0.85rem; font-style:italic; text-align:center;">Construyendo grilla de descargas…</span>
     </div>
   </div>
 
@@ -83,7 +83,7 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V0.5.5</div>
+  <div id="version">V0.6.0</div>
 
 <script>
   const ultimaDiv = document.getElementById('ultimaActualizacion');
@@ -98,14 +98,14 @@
   const hastaInput = document.getElementById('hasta');
   const ordenSelect = document.getElementById('orden');
 
-  // Elementos del buscador compacto de descarga
   const descFiltroAnno = document.getElementById('descFiltroAnno');
   const descDesagregarMensual = document.getElementById('descDesagregarMensual');
   const descCargandoStatus = document.getElementById('descCargandoStatus');
   const descContenedorEnlaces = document.getElementById('descContenedorEnlaces');
 
-  let baseDocumentosIndexados = []; // Caché en memoria
+  let baseDocumentosIndexados = []; // Memoria caché
 
+  // Configuración base flexible (La auto-detección corregirá prefijos erróneos en vivo)
   const CONFIG_CATEGORIAS = {
     boletines: { prefix: 'boletines_part_', digits: 0, label: 'Boletín', badgeClass: 'badge-boletin', resultClass: '', colorHex: '#0000ff', pdfUrlFallback: (num) => `https://quilmes.gov.ar/pdf/boletines/boletin-${num}.pdf` },
     licitaciones: { prefix: 'lici_part', digits: 4, label: 'Licitación', badgeClass: 'badge-lici', resultClass: 'licitacion', colorHex: '#e67e22', pdfUrlFallback: (num) => `https://quilmes.gov.ar/pdf/licitaciones/lici-${num}.pdf` },
@@ -113,19 +113,52 @@
     hcd_taqui: { prefix: 'hcd_taqui_part', digits: 4, label: 'HCD Taquigráfica', badgeClass: 'badge-taqui', resultClass: 'hcd_taqui', colorHex: '#9b59b6', pdfUrlFallback: (num) => `https://quilmes.gov.ar/pdf/hcd/taqui-${num}.pdf` }
   };
 
-  async function detectChunks(key) {
-    const cat = CONFIG_CATEGORIAS[key];
-    let n = 0;
-    while(true) {
-      const indexStr = cat.digits > 0 ? String(n + 1).padStart(cat.digits, '0') : (n + 1);
-      const url = `json_chunks/${cat.prefix}${indexStr}.jsonl`;
-      try {
-        const res = await fetch(url, { method: 'HEAD' });
-        if (!res.ok) break;
-        n++;
-      } catch { break; }
+  // == NUEVO: DETECTOR AUTO-ADAPTATIVO DE FORMATO DE ARCHIVOS ==
+  async function autoDetectarFormatos() {
+    for (let key of Object.keys(CONFIG_CATEGORIAS)) {
+      const cat = CONFIG_CATEGORIAS[key];
+      
+      // Seteo inicial por si falla la red por completo
+      cat.detectedTotal = 0;
+      cat.detectedPrefix = cat.prefix;
+      cat.detectedDigits = cat.digits;
+
+      // Matriz de posibles variantes reales de nombres en tu carpeta json_chunks/
+      let variantes = [
+        { prefix: cat.prefix + '_', digits: 4, url: `json_chunks/${cat.prefix}_0001.jsonl` },
+        { prefix: cat.prefix, digits: 4, url: `json_chunks/${cat.prefix}0001.jsonl` },
+        { prefix: cat.prefix + '_', digits: 0, url: `json_chunks/${cat.prefix}_1.jsonl` },
+        { prefix: cat.prefix, digits: 0, url: `json_chunks/${cat.prefix}1.jsonl` }
+      ];
+
+      let formatoValidado = null;
+      for (let v of variantes) {
+        try {
+          let res = await fetch(v.url, { method: 'HEAD' });
+          if (res.ok) {
+            formatoValidado = v;
+            break;
+          }
+        } catch {}
+      }
+
+      // Si descubrimos cómo se llama el archivo número 1, contamos el resto secuencialmente
+      if (formatoValidado) {
+        let n = 1;
+        while (true) {
+          const indexStr = formatoValidado.digits > 0 ? String(n + 1).padStart(formatoValidado.digits, '0') : (n + 1);
+          const urlSiguiente = `json_chunks/${formatoValidado.prefix}${indexStr}.jsonl`;
+          try {
+            let res = await fetch(urlSiguiente, { method: 'HEAD' });
+            if (!res.ok) break;
+            n++;
+          } catch { break; }
+        }
+        cat.detectedTotal = n;
+        cat.detectedPrefix = formatoValidado.prefix;
+        cat.detectedDigits = formatoValidado.digits;
+      }
     }
-    return n;
   }
 
   function obtenerFechaYYYYMMDD(obj) {
@@ -141,20 +174,21 @@
     return match ? match[1] : 'N/D';
   }
 
+  // Muestra la cabecera usando los datos auto-detectados y validados
   async function mostrarUltimaActualizacion() {
     ultimaDiv.innerHTML = '<div style="display:flex; flex-wrap:wrap; gap:0.8rem; font-size:0.85rem; background:#fff; padding:0.6rem; border-radius:6px; border:1px solid #ccc; justify-content:center;"></div>';
     const container = ultimaDiv.firstChild;
 
     for (let key of Object.keys(CONFIG_CATEGORIAS)) {
       const conf = CONFIG_CATEGORIAS[key];
-      const total = await detectChunks(key);
+      const total = conf.detectedTotal;
       if (total === 0) {
-        container.innerHTML += `<span style="color:#777;">• <strong>${conf.label}:</strong> Sin datos</span>`;
+        container.innerHTML += `<span style="border-left: 4px solid #ccc; padding-left:5px; color:#666;"><strong>${conf.label}:</strong> Sin datos</span>`;
         continue;
       }
       try {
-        const indexStr = conf.digits > 0 ? String(total).padStart(conf.digits, '0') : total;
-        const chunk = await fetch(`json_chunks/${conf.prefix}${indexStr}.jsonl`).then(r=>r.text());
+        const indexStr = conf.detectedDigits > 0 ? String(total).padStart(conf.detectedDigits, '0') : total;
+        const chunk = await fetch(`json_chunks/${conf.detectedPrefix}${indexStr}.jsonl`).then(r=>r.text());
         const lines = chunk.trim().split('\n').filter(Boolean);
         let encontrado = false;
         for (let i = lines.length - 1; i >= 0; i--) {
@@ -168,9 +202,9 @@
             break;
           } catch{}
         }
-        if(!encontrado) container.innerHTML += `<span style="color:#777;">• <strong>${conf.label}:</strong> Vacío</span>`;
+        if(!encontrado) container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px; color:#666;"><strong>${conf.label}:</strong> Estructura vacía</span>`;
       } catch {
-        container.innerHTML += `<span style="color:#777;">• <strong>${conf.label}:</strong> N/D</span>`;
+        container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px; color:#666;"><strong>${conf.label}:</strong> Error lectura</span>`;
       }
     }
   }
@@ -206,22 +240,31 @@
     else regex = new RegExp(q,'i');
 
     let matches = [];
+    let granTotalChunks = 0;
+    categoriasActivas.forEach(k => { granTotalChunks += CONFIG_CATEGORIAS[k].detectedTotal; });
+    progressBar.max = granTotalChunks || 1;
+    let chunksProcesados = 0;
+
     for (let key of categoriasActivas) {
-      const totalJsonls = await detectChunks(key);
       const catConfig = CONFIG_CATEGORIAS[key];
+      const totalJsonls = catConfig.detectedTotal;
       for (let i = 0; i < totalJsonls; i++) {
-        const indexStr = catConfig.digits > 0 ? String(i + 1).padStart(catConfig.digits, '0') : (i + 1);
-        const text = await fetch(`json_chunks/${catConfig.prefix}${indexStr}.jsonl`).then(r => r.text());
-        for (let ln of text.split('\n')) {
-          if (!ln) continue;
-          try {
-            const obj = JSON.parse(ln);
-            if (regex.test(obj.fragmento)) {
-              obj.tipoCategoriaKey = key;
-              matches.push(obj);
-            }
-          } catch{}
-        }
+        const indexStr = catConfig.detectedDigits > 0 ? String(i + 1).padStart(catConfig.detectedDigits, '0') : (i + 1);
+        try {
+          const text = await fetch(`json_chunks/${catConfig.detectedPrefix}${indexStr}.jsonl`).then(r => r.text());
+          for (let ln of text.split('\n')) {
+            if (!ln) continue;
+            try {
+              const obj = JSON.parse(ln);
+              if (regex.test(obj.fragmento)) {
+                obj.tipoCategoriaKey = key;
+                matches.push(obj);
+              }
+            } catch{}
+          }
+        } catch{}
+        chunksProcesados++;
+        progressBar.value = chunksProcesados;
       }
     }
 
@@ -271,20 +314,20 @@
     });
   }
 
-  // LÓGICA AUTOMÁTICA EN SEGUNDO PLANO PARA EL CALENDARIO DE DESCARGAS
+  // Indexación y mapeo de enlaces usando los parámetros auto-detectados seguros
   async function inicializarIndiceDescargas() {
     let mapeoDocsUnicos = {};
     let annosExistentes = new Set();
     const todasLasKeys = Object.keys(CONFIG_CATEGORIAS);
 
     for (let key of todasLasKeys) {
-      const totalJsonls = await detectChunks(key);
       const catConfig = CONFIG_CATEGORIAS[key];
+      const totalJsonls = catConfig.detectedTotal;
 
       for (let i = 0; i < totalJsonls; i++) {
-        const indexStr = catConfig.digits > 0 ? String(i + 1).padStart(catConfig.digits, '0') : (i + 1);
+        const indexStr = catConfig.detectedDigits > 0 ? String(i + 1).padStart(catConfig.detectedDigits, '0') : (i + 1);
         try {
-          const text = await fetch(`json_chunks/${catConfig.prefix}${indexStr}.jsonl`).then(r => r.text());
+          const text = await fetch(`json_chunks/${catConfig.detectedPrefix}${indexStr}.jsonl`).then(r => r.text());
           for (let ln of text.split('\n')) {
             if (!ln) continue;
             try {
@@ -312,7 +355,6 @@
 
     baseDocumentosIndexados = Object.values(mapeoDocsUnicos);
     
-    // Rellenar selector de años
     descFiltroAnno.innerHTML = '<option value="TODOS">Todos los años</option>';
     Array.from(annosExistentes).sort((a,b) => b.localeCompare(a)).forEach(a => {
       descFiltroAnno.innerHTML += `<option value="${a}">${a}</option>`;
@@ -324,11 +366,10 @@
 
   function renderizarEnlacesIndice() {
     if (baseDocumentosIndexados.length === 0) {
-      descContenedorEnlaces.innerHTML = '<span style="color:#888; font-size:0.85rem;">No hay registros.</span>';
+      descContenedorEnlaces.innerHTML = '<span style="color:#888; font-size:0.85rem;">No hay registros detectados en los repositorios.</span>';
       return;
     }
 
-    // Filtrar en base a las casillas marcadas del buscador principal de arriba
     const boletinesChecked = document.getElementById('cat-boletines').checked;
     const licitacionesChecked = document.getElementById('cat-licitaciones').checked;
     const ordenesChecked = document.getElementById('cat-hcd-orden').checked;
@@ -400,7 +441,6 @@
     return link;
   }
 
-  // Listeners para refrescar el calendario si el usuario cambia los filtros
   descFiltroAnno.addEventListener('change', renderizarEnlacesIndice);
   descDesagregarMensual.addEventListener('change', renderizarEnlacesIndice);
   document.getElementById('cat-boletines').addEventListener('change', renderizarEnlacesIndice);
@@ -411,9 +451,14 @@
   botonBuscar.addEventListener('click', realizarBusqueda);
   busquedaInput.addEventListener('keydown', e => { if(e.key === 'Enter') realizarBusqueda(); });
 
-  // ARRANQUE AUTOMÁTICO
-  mostrarUltimaActualizacion();
-  inicializarIndiceDescargas();
+  // == ARRANQUE SECUENCIAL CORRECTO ==
+  async function inicializarAplicacion() {
+    await autoDetectarFormatos(); // 1) Analiza y corrige nombres
+    await mostrarUltimaActualizacion(); // 2) Pinta la cabecera sin pisarse
+    await inicializarIndiceDescargas(); // 3) Genera el calendario de botones
+  }
+
+  inicializarAplicacion();
 </script>
 </body>
 </html>
