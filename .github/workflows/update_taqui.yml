@@ -1,7 +1,6 @@
 name: 🎙️ Actualización Automática de Actas Taquigráficas
 
 on:
-  # Permite ejecutarlo manualmente desde la pestaña Actions para procesar TODO la primera vez
   workflow_dispatch:
     inputs:
       force_all:
@@ -10,7 +9,6 @@ on:
         type: boolean
         default: true
 
-  # Corre automáticamente todos los días a las 04:00 AM (Hora UTC)
   schedule:
     - cron: '0 4 * * *'
 
@@ -29,42 +27,10 @@ jobs:
 
       - name: 📦 Instalar Dependencias
         run: |
-          pip install PyMuPDF
+          pip install requests PyMuPDF
 
-      - name: 🤖 Descargar Archivos de Google Drive Público de Forma Nativa
+      - name: 🗜️ Ejecutar Descarga y Chunking Secuencial
         run: |
-          # Creamos un directorio temporal para la descarga de los PDFs
-          mkdir -p temp_pdfs
-          cd temp_pdfs
-          
-          # Descargamos la carpeta pública simulando el ZIP directo que genera Google Drive
-          # ID de tu carpeta: 1vBrQH0h1ddIlplj3ChZ0VkqAK8UjgecB
-          FOLDER_ID="1vBrQH0h1ddIlplj3ChZ0VkqAK8UjgecB"
-          
-          echo "Iniciando descarga de la carpeta de Drive..."
-          curl -L "https://docs.google.com/uc?export=download&id=${FOLDER_ID}" -o carpeta_drive.zip || wget --no-check-certificate "https://docs.google.com/uc?export=download&id=${FOLDER_ID}" -O carpeta_drive.zip
-          
-          # Si Drive frena la descarga por el tamaño mostrando la advertencia de virus, usamos el token de confirmación nativo:
-          if [ ! -s carpeta_drive.zip ] || grep -q "confirm=" carpeta_drive.zip; then
-            echo "Confirmando descarga de archivo grande..."
-            CONFIRM_TOKEN=$(curl -sL "https://docs.google.com/uc?export=download&id=${FOLDER_ID}" | grep -o 'confirm=[^&]*' | head -n 1)
-            curl -L "https://docs.google.com/uc?export=download&${CONFIRM_TOKEN}&id=${FOLDER_ID}" -o carpeta_drive.zip
-          fi
-          
-          # Descomprimimos los archivos directamente en la raíz donde el script de Python los espera
-          if [ -f carpeta_drive.zip ]; then
-            unzip -o carpeta_drive.zip -d ../
-            echo "Archivos PDF desplegados con éxito en el espacio de trabajo."
-          else
-            echo "⚠️ No se pudo obtener el archivo comprimido desde Google Drive."
-          fi
-          
-          cd ..
-          rm -rf temp_pdfs
-
-      - name: 🗜️ Generar Chunks de Actas Taquigráficas
-        run: |
-          # Si fue disparado a mano, le pasamos la bandera --force para que ignore las fechas
           if [ "${{ github.event.inputs.force_all }}" = "true" ]; then
             python scripts/update_taquigraficas.py --force
           else
@@ -76,12 +42,11 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Añadimos solo los nuevos chunks generados sin subir los PDFs pesados a la base de código
           git add json_chunks/
           
           if git diff --staged --quiet; then
             echo "No se detectaron nuevas actas para guardar hoy."
           else
-            git commit -m "🎙️ Sincronización automática de Actas Taquigráficas [skip ci]"
+            git commit -m "🎙️ Sincronización ordenada de Actas Taquigráficas [skip ci]"
             git push origin main
           fi
