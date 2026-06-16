@@ -31,13 +31,36 @@ jobs:
         run: |
           pip install PyMuPDF
 
-      - name: 🤖 Descargar Archivos de Google Drive Público
-        uses: workon/drive-downloader-action@v1
-        with:
-          # ID extraído de tu URL: 1vBrQH0h1ddIlplj3ChZ0VkqAK8UjgecB
-          folder-id: '1vBrQH0h1ddIlplj3ChZ0VkqAK8UjgecB'
-          # Los descarga en la carpeta raíz donde corre el script
-          destination: '.'
+      - name: 🤖 Descargar Archivos de Google Drive Público de Forma Nativa
+        run: |
+          # Creamos un directorio temporal para la descarga de los PDFs
+          mkdir -p temp_pdfs
+          cd temp_pdfs
+          
+          # Descargamos la carpeta pública simulando el ZIP directo que genera Google Drive
+          # ID de tu carpeta: 1vBrQH0h1ddIlplj3ChZ0VkqAK8UjgecB
+          FOLDER_ID="1vBrQH0h1ddIlplj3ChZ0VkqAK8UjgecB"
+          
+          echo "Iniciando descarga de la carpeta de Drive..."
+          curl -L "https://docs.google.com/uc?export=download&id=${FOLDER_ID}" -o carpeta_drive.zip || wget --no-check-certificate "https://docs.google.com/uc?export=download&id=${FOLDER_ID}" -O carpeta_drive.zip
+          
+          # Si Drive frena la descarga por el tamaño mostrando la advertencia de virus, usamos el token de confirmación nativo:
+          if [ ! -s carpeta_drive.zip ] || grep -q "confirm=" carpeta_drive.zip; then
+            echo "Confirmando descarga de archivo grande..."
+            CONFIRM_TOKEN=$(curl -sL "https://docs.google.com/uc?export=download&id=${FOLDER_ID}" | grep -o 'confirm=[^&]*' | head -n 1)
+            curl -L "https://docs.google.com/uc?export=download&${CONFIRM_TOKEN}&id=${FOLDER_ID}" -o carpeta_drive.zip
+          fi
+          
+          # Descomprimimos los archivos directamente en la raíz donde el script de Python los espera
+          if [ -f carpeta_drive.zip ]; then
+            unzip -o carpeta_drive.zip -d ../
+            echo "Archivos PDF desplegados con éxito en el espacio de trabajo."
+          else
+            echo "⚠️ No se pudo obtener el archivo comprimido desde Google Drive."
+          fi
+          
+          cd ..
+          rm -rf temp_pdfs
 
       - name: 🗜️ Generar Chunks de Actas Taquigráficas
         run: |
