@@ -1,0 +1,64 @@
+name: 🎙️ Actualización Automática de Actas Taquigráficas
+
+on:
+  # Permite ejecutarlo manualmente desde la pestaña Actions para procesar TODO la primera vez
+  workflow_dispatch:
+    inputs:
+      force_all:
+        description: '¿Forzar corrida completa e ignorar el calendario?'
+        required: true
+        type: boolean
+        default: true
+
+  # Corre automáticamente todos los días a las 04:00 AM (Hora UTC)
+  schedule:
+    - cron: '0 4 * * *'
+
+jobs:
+  update-taqui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Clonar Repositorio
+        uses: actions/checkout@v4
+
+      - name: 🐍 Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python_version: '3.10'
+          cache: 'pip'
+
+      - name: 📦 Instalar Dependencias
+        run: |
+          pip install PyMuPDF
+
+      - name: 🤖 Descargar Archivos de Google Drive Público
+        uses: workon/drive-downloader-action@v1
+        with:
+          # ID extraído de tu URL: 1vBrQH0h1ddIlplj3ChZ0VkqAK8UjgecB
+          folder-id: '1vBrQH0h1ddIlplj3ChZ0VkqAK8UjgecB'
+          # Los descarga en la carpeta raíz donde corre el script
+          destination: '.'
+
+      - name: 🗜️ Generar Chunks de Actas Taquigráficas
+        run: |
+          # Si fue disparado a mano, le pasamos la bandera --force para que ignore las fechas
+          if [ "${{ github.event.inputs.force_all }}" = "true" ]; then
+            python scripts/update_taquigraficas.py --force
+          else
+            python scripts/update_taquigraficas.py
+          fi
+
+      - name: 🚀 Subir Cambios a GitHub (json_chunks/)
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Añadimos solo los nuevos chunks generados sin subir los PDFs pesados a la base de código
+          git add json_chunks/
+          
+          if git diff --staged --quiet; then
+            echo "No se detectaron nuevas actas para guardar hoy."
+          else
+            git commit -m "🎙️ Sincronización automática de Actas Taquigráficas [skip ci]"
+            git push origin main
+          fi
