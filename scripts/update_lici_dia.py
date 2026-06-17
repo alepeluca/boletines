@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-update_licitaciones.py — Versión 6.1.0 (Modo Vigilancia Activa)
+update_licitaciones.py — Versión 6.2.0 (Modo Vigilancia Activa)
 
-FLUJO DIARIO AUTOMÁTICA CON NORMALIZACIÓN NNNN:
-1. Escanea la carpeta 'json_chunks/' para saber cuál fue la última licitación procesada de 2026.
-2. Setea el inicio de 2026 en ese número (ej: 037) y el inicio de 2027 en el número 001.
+FLUJO DIARIO AUTOMÁTICO CON SUBDIR 'lici' Y FORMATO 4 DÍGITOS f"{idx:04d}":
+1. Escanea la carpeta 'json_chunks/lici/' para saber cuál fue la última licitación procesada.
+2. Setea el inicio de monitoreo de años correlativos.
 3. Prueba la existencia de las URLs en el servidor municipal (controlando subpliegos Z).
 4. Si encuentra algo nuevo: aplica OCR con Tesseract, extrae el OBJETO en CamelCase
-   y guarda el chunk con el formato estandarizado estricto de 4 dígitos: lici_partNNNN.jsonl
+   y guarda el chunk en 'json_chunks/lici/lici_partNNNN.jsonl'
 """
 
 import json
@@ -29,10 +29,11 @@ from PIL import Image
 # CONFIG
 # =========================================================
 
-VERSION = "6.1.0"
-FECHA_MODIFICACION = "15-06-2026"
+VERSION = "6.2.0"
+FECHA_MODIFICACION = "17-06-2026"
 
-JSON_CHUNKS_DIR = Path("json_chunks")
+# Cambiado para que opere directamente en la subcarpeta 'lici'
+JSON_CHUNKS_DIR = Path("json_chunks/lici")
 BASE_URL = "https://quilmes.gov.ar/contrataciones/licpublicas/"
 
 HEADERS = {
@@ -43,7 +44,8 @@ HEADERS = {
     )
 }
 
-JSON_CHUNKS_DIR.mkdir(exist_ok=True)
+# Crea la estructura completa de subcarpetas si no existe
+JSON_CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
 
 print("\n" + "=" * 60)
 print(f"📡 MODO VIGILANCIA ACTIVA DE LICITACIONES v{VERSION}")
@@ -56,7 +58,7 @@ print("=" * 60 + "\n")
 # =========================================================
 
 def get_next_free_chunk_index():
-    """Busca el número de índice máximo real entre los archivos normalizados."""
+    """Busca el número de índice máximo real dentro de json_chunks/lici/."""
     indices = []
     # Captura lici_part seguido de cualquier cantidad de dígitos
     for f in JSON_CHUNKS_DIR.glob("lici_part*.jsonl"):
@@ -64,7 +66,7 @@ def get_next_free_chunk_index():
         if match:
             indices.append(int(match.group(1)))
         else:
-            # Fallback por si todavía quedan archivos con el formato viejo de guion bajo
+            # Fallback histórico por si queda alguna variante con guion bajo
             match_viejo = re.search(r"lici_part(\d+)_", f.name)
             if match_viejo:
                 indices.append(int(match_viejo.group(1)))
@@ -75,9 +77,8 @@ def get_next_free_chunk_index():
 
 
 def get_last_processed_xxx_for_year(anio_str):
-    """Revisa los chunks para ver cuál es el número XXX más alto guardado de un año específico."""
+    """Revisa los chunks en json_chunks/lici/ para ver el XXX más alto guardado del año especificado."""
     max_xxx = 0
-    # Inspeccionamos el contenido interno de los archivos para ver a qué código de pliego corresponden
     for f in JSON_CHUNKS_DIR.glob("lici_part*.jsonl"):
         try:
             with open(f, "r", encoding="utf-8") as file:
@@ -85,9 +86,9 @@ def get_last_processed_xxx_for_year(anio_str):
                 if not primera_linea:
                     continue
                 data = json.loads(primera_linea)
-                codigo = data.get("codigo", "") # ej: "196260-1"
+                codigo = data.get("codigo", "") # ej: "037260-1"
                 
-                # Verificamos si pertenece al año buscado (ej: "26" o "27")
+                # Verificamos si pertenece al año buscado (ej: posiciones de año en el código)
                 if len(codigo) >= 5 and codigo[3:5] == anio_str:
                     xxx_val = int(codigo[:3])
                     if xxx_val > max_xxx:
@@ -120,7 +121,7 @@ def limpiar_texto_objeto(texto_completo, max_palabras=5):
 
 
 def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
-    """Descarga el PDF, aplica OCR obligatorio y guarda con el formato NNNN limpio."""
+    """Descarga el PDF, aplica OCR obligatorio y guarda con el formato NNNN en lici/."""
     try:
         response = requests.get(url, headers=HEADERS, timeout=30)
         response.raise_for_status()
@@ -157,10 +158,8 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
         nombre_archivo_virtual = f"LiciPubli_{codigo_completo}_{objeto_camel}.pdf"
         timestamp_procesado = datetime.utcnow().isoformat()
         
-        # NUEVO: Formatear el índice de chunk estrictamente a 4 dígitos (NNNN)
-        part_cuatro_digitos = f"{chunk_index:04d}"
-        # NUEVO: Quitamos el sufijo del código para normalizar el nombre
-        salida = JSON_CHUNKS_DIR / f"lici_part{part_cuatro_digitos}.jsonl"
+        # CAMBIO STREMEDAL: Estandarizar nombre con relleno de 4 ceros lici_partNNNN.jsonl
+        salida = JSON_CHUNKS_DIR / f"lici_part{chunk_index:04d}.jsonl"
         
         with open(salida, "w", encoding="utf-8") as f:
             for f_data in frags_finales:
@@ -174,7 +173,7 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
                     "procesado": timestamp_procesado
                 }
                 f.write(json.dumps(chunk_linea, ensure_ascii=False) + "\n")
-        print(f"[OK] NUEVA LICITACIÓN DETECTADA Y GUARDADA: {salida.name}")
+        print(f"[OK] NUEVA LICITACIÓN DETECTADA Y GUARDADA: {salida}")
         return True
     return False
 
@@ -186,7 +185,7 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
 def main():
     proximo_index_chunk = get_next_free_chunk_index()
     
-    # 1. Definir los años bajo vigilancia (Año anterior '26' y Año corriente '27')
+    # Definir los años bajo vigilancia (Año anterior '26' y Año corriente '27')
     monitoreo_config = [
         {"anio_str": "26", "start_xxx": get_last_processed_xxx_for_year("26") + 1},
         {"anio_str": "27", "start_xxx": get_last_processed_xxx_for_year("27") + 1}
@@ -198,7 +197,7 @@ def main():
         anio = item["anio_str"]
         xxx_inicio = item["start_xxx"]
         
-        print(f"[VIGILANCIA] Analizando año 20{anio}. Buscando desde el número {xxx_inicio:03d}...")
+        print(f"[VIGILANCIA] Analizando año 20{anio} en subcarpeta 'lici/'. Buscando desde el número {xxx_inicio:03d}...")
         
         # Probamos una ventana de hasta 15 números correlativos hacia adelante por día
         for xxx_int in range(xxx_inicio, xxx_inicio + 15):
@@ -215,7 +214,7 @@ def main():
                     existe = False
                 
                 if existe:
-                    # Buscamos si el código ya fue indexado en algún archivo para no duplicar
+                    # Buscamos si el código ya fue indexado dentro de 'lici/' para evitar duplicados
                     archivo_ya_existe = False
                     for chunk_file in JSON_CHUNKS_DIR.glob("lici_part*.jsonl"):
                         try:
@@ -234,11 +233,11 @@ def main():
                             proximo_index_chunk += 1
                             nuevos_hallazgos += 1
                 else:
-                    break # Si la variante Z=1 no existe, frena la sub-búsqueda para ese número XXX
+                    break  # Si el pliego base o variante Z=1 no existe, frena las subvariantes de ese XXX
             
             time.sleep(1.5)
 
-    print(f"\n[INFO] Tarea de vigilancia diaria terminada. Nuevos pliegos encontrados: {nuevos_hallazgos}")
+    print(f"\n[INFO] Tarea de vigilancia terminada en 'json_chunks/lici/'. Chunks nuevos creados: {nuevos_hallazgos}")
 
 
 if __name__ == "__main__":
