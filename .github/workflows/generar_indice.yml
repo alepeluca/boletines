@@ -5,7 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'json_chunks/**/*.jsonl'  # Se dispara SOLO si cambia o se agrega un chunk
+      - 'json_chunks/**/*.jsonl'  # Se dispara en cadena automáticamente cuando entra un chunk
+  workflow_dispatch:              # <-- ¡ESTO PERMITE LA PRIMERA CORRIDA MANUAL DESDE LA WEB!
 
 jobs:
   build-csv:
@@ -15,7 +16,7 @@ jobs:
       - name: Check out del repositorio
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Trae todo el historial para evitar conflictos en el rebase
+          fetch-depth: 0
 
       - name: Configurar Python
         uses: actions/setup-python@v5
@@ -31,16 +32,12 @@ jobs:
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
           
-          # Agregamos solo el archivo del índice generado
           git add indice_documentos.csv
           
-          # Verificamos si realmente hubo cambios en el CSV antes de commitear
           if git diff --staged --quiet; then
             echo "[INFO] El índice CSV ya estaba actualizado. No se requieren cambios."
           else
-            git commit -m "Autogeneración diaria de índice_documentos.csv [Skip GitHub Actions]"
-            
-            # El pull --rebase previene rebotes si otro scraper subió algo en simultáneo
+            git commit -m "Autogeneración de índice_documentos.csv [Skip GitHub Actions]"
             git pull --rebase origin main
             git push origin main
           fi
