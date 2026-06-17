@@ -2,15 +2,16 @@
 # -*- coding: utf-8 -*-
 
 """
-update_ordenes.py — Versión 1.0.0 (Edición Órdenes del Día con OCR)
+update_ordenes.py — Versión 1.1.0 (Edición Órdenes del Día con OCR)
 
 FLUJO CONTROLADO SECUENCIAL:
 1. Verifica el calendario quincenal (o atiende la bandera manual --force).
 2. Mapea la nueva carpeta de Drive mediante tokens cruzados inmunes a bloqueos.
-3. Filtra archivos válidos (YYYYMMDD*.pdf) y los ordena del más antiguo al más nuevo.
-4. Descarga secuencialmente uno por uno.
-5. Aplica OCR con Tesseract página por página cuidando la memoria del servidor.
-6. Guarda el chunk normalizado a 4 dígitos y elimina el PDF temporal inmediatamente.
+3. Escanea la subcarpeta exclusiva 'json_chunks/orden/' para saber el último index.
+4. Filtra archivos válidos (YYYYMMDD*.pdf) y los ordena del más antiguo al más nuevo.
+5. Descarga secuencialmente uno por uno.
+6. Aplica OCR con Tesseract página por página cuidando la memoria del servidor.
+7. Guarda el chunk normalizado a 4 dígitos en su subcarpeta correspondiente.
 """
 
 import json
@@ -26,16 +27,18 @@ import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 
-VERSION = "1.0.0"
-FECHA_MODIFICACION = "16-06-2026"
+VERSION = "1.1.0"
+FECHA_MODIFICACION = "17-06-2026"
 
-JSON_CHUNKS_DIR = Path("json_chunks")
-JSON_CHUNKS_DIR.mkdir(exist_ok=True)
+# Cambiado para apuntar nativamente a la subcarpeta 'orden'
+JSON_CHUNKS_DIR = Path("json_chunks/orden")
+JSON_CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ID de la carpeta provista para Órdenes del Día
 FOLDER_ID = "1oWFnT-KijLjl315q-EcoDCi9XNRANTeJ"
 DRIVE_FOLDER_URL = f"https://drive.google.com/drive/folders/{FOLDER_ID}"
-PREFIX = "hcd_orden_part"
+# Forzamos que coincida con la nomenclatura asimétrica configurada en tu index.html
+PREFIX = "hcd_orden_part_"
 
 print("\n" + "=" * 60)
 print(f"📄 ACTUALIZADOR OCR DE ÓRDENES DEL DÍA v{VERSION}")
@@ -74,6 +77,7 @@ def es_periodo_de_actualizacion():
 # =========================================================
 def get_next_free_chunk_index():
     indices = []
+    # Busca solo dentro de json_chunks/orden/
     for f in JSON_CHUNKS_DIR.glob(f"{PREFIX}*.jsonl"):
         match = re.match(r"^" + PREFIX + r"(\d+)\.jsonl$", f.name, re.IGNORECASE)
         if match:
@@ -83,6 +87,7 @@ def get_next_free_chunk_index():
     return max(indices) + 1
 
 def codigo_ya_indexado(id_base):
+    # Busca duplicados solo dentro de la subcarpeta 'orden'
     for chunk_file in JSON_CHUNKS_DIR.glob(f"{PREFIX}*.jsonl"):
         try:
             with open(chunk_file, "r", encoding="utf-8") as cf:
@@ -171,16 +176,13 @@ def procesar_pdf_local_ocr(pdf_path, chunk_index, file_name):
     frags_finales = []
     texto_p1 = ""
 
-    # Procesamos de forma estricta página por página para evitar desborde de RAM
     for index_pag in range(len(doc)):
         try:
             page = doc[index_pag]
-            # Renderizado a imagen (150 DPI es el equilibrio ideal entre peso y precisión OCR)
             pix = page.get_pixmap(dpi=150)
             img_bytes = pix.tobytes("png")
             imagen_pil = Image.open(io.BytesIO(img_bytes))
             
-            # Ejecución del OCR en español
             texto_extraido = pytesseract.image_to_string(imagen_pil, lang='spa').strip()
             imagen_pil.close()
 
@@ -206,6 +208,7 @@ def procesar_pdf_local_ocr(pdf_path, chunk_index, file_name):
     id_base = file_name.replace(".pdf", "").replace(".PDF", "")
     timestamp_procesado = datetime.utcnow().isoformat()
     
+    # CAMBIO: Relleno estricto con padding de 4 ceros f"{chunk_index:04d}"
     part_cuatro_digitos = f"{chunk_index:04d}"
     salida = JSON_CHUNKS_DIR / f"{PREFIX}{part_cuatro_digitos}.jsonl"
 
@@ -223,7 +226,7 @@ def procesar_pdf_local_ocr(pdf_path, chunk_index, file_name):
             }
             f.write(json.dumps(chunk_linea, ensure_ascii=False) + "\n")
             
-    print(f"  [OK] OCR Completo -> {salida.name} (Fecha de Orden: {fecha_acta})")
+    print(f"  [OK] OCR Completo -> {salida} (Fecha de Orden: {fecha_acta})")
     return True
 
 # =========================================================
@@ -236,7 +239,7 @@ def main():
         print("[INFO] Automatización detenida por calendario quincenal.")
         sys.exit(0)
 
-    print("[PROCESO] Conectando con la carpeta pública de Órdenes del Día...")
+    print("[PROCESO] Conectando con la carpeta pública de Órdenes del Día en subcarpeta 'orden/'...")
     archivos_drive = listar_archivos_drive_publico(FOLDER_ID)
     
     if not archivos_drive:
@@ -280,7 +283,7 @@ def main():
         else:
             print(f"  [⚠️] Error de red al bajar: {name}")
 
-    print(f"\n[INFO] Sincronización finalizada. Nuevos chunks con OCR creados: {nuevos_hallazgos}")
+    print(f"\n[INFO] Sincronización finalizada en 'json_chunks/orden/'. Chunks nuevos creados: {nuevos_hallazgos}")
 
 if __name__ == "__main__":
     main()
