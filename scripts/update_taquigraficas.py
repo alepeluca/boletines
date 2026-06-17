@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 
 """
-update_taquigraficas.py — Versión 2.2.0
+update_taquigraficas.py — Versión 2.3.0
 
-FLUJO HYPER-ROBUSTO:
+FLUJO HYPER-ROBUSTO CON SUBDIR 'taqui' Y FORMATO 4 DÍGITOS f"{idx:04d}":
 1. Verifica el calendario quincenal (o atiende la bandera manual --force).
 2. Consulta múltiples endpoints públicos de Google Drive evadiendo bloqueos de cookies.
-3. Aplica un escáner de proximidad por tokens para extraer IDs y nombres de forma infalible.
+3. Escanea la subcarpeta exclusiva 'json_chunks/taqui/' para saber el último index.
 4. Filtra actas válidas (YYYYMMDD*.pdf) y las ordena de la más vieja a la más nueva.
 5. Descarga, procesa y elimina de forma secuencial una por una para cuidar los recursos.
 """
@@ -22,11 +22,12 @@ from pathlib import Path
 import requests
 import fitz  # PyMuPDF
 
-VERSION = "2.2.0"
-FECHA_MODIFICACION = "16-06-2026"
+VERSION = "2.3.0"
+FECHA_MODIFICACION = "17-06-2026"
 
-JSON_CHUNKS_DIR = Path("json_chunks")
-JSON_CHUNKS_DIR.mkdir(exist_ok=True)
+# Cambiado para que opere directamente en la subcarpeta 'taqui'
+JSON_CHUNKS_DIR = Path("json_chunks/taqui")
+JSON_CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
 
 FOLDER_ID = "1vBrQH0h1ddIlplj3ChZ0VkqAK8UjgecB"
 DRIVE_FOLDER_URL = f"https://drive.google.com/drive/folders/{FOLDER_ID}"
@@ -68,6 +69,7 @@ def es_periodo_de_actualizacion():
 # =========================================================
 def get_next_free_chunk_index():
     indices = []
+    # Busca solo dentro de json_chunks/taqui/
     for f in JSON_CHUNKS_DIR.glob("taqui_part*.jsonl"):
         match = re.match(r"^taqui_part(\d+)\.jsonl$", f.name, re.IGNORECASE)
         if match:
@@ -77,6 +79,7 @@ def get_next_free_chunk_index():
     return max(indices) + 1
 
 def codigo_ya_indexado(id_base):
+    # Busca duplicados solo dentro de la subcarpeta 'taqui'
     for chunk_file in JSON_CHUNKS_DIR.glob("taqui_part*.jsonl"):
         try:
             with open(chunk_file, "r", encoding="utf-8") as cf:
@@ -95,7 +98,6 @@ def listar_archivos_drive_publico(folder_id):
     files = []
     seen_ids = set()
     
-    # Lista de endpoints espejo estratégicos de Google Drive
     urls = [
         f"https://drive.google.com/embeddedfolderview?id={folder_id}&hl=es",
         f"https://drive.google.com/drive/folders/{folder_id}?hl=es",
@@ -115,11 +117,8 @@ def listar_archivos_drive_publico(folder_id):
                 continue
                 
             html = res.text
-            # Extraemos de forma plana absolutamente todas las cadenas literales en las comillas del código fuente
             all_tokens = re.findall(r'"([^"\\]*(?:\\.[^"\\]*)*)"', html) + re.findall(r"'([^'\\]*(?:\\.[^'\\]*)*)'", html)
             
-            # Algoritmo de Ventana de Proximidad: Si encontramos un PDF con fecha,
-            # su ID único de Drive de 33 caracteres estará máximo a 15 posiciones de distancia.
             for i in range(len(all_tokens)):
                 tok = all_tokens[i]
                 if tok.lower().endswith('.pdf') and re.match(r'^\d{8}', tok):
@@ -127,7 +126,6 @@ def listar_archivos_drive_publico(folder_id):
                     end = min(len(all_tokens), i + 15)
                     for j in range(start, end):
                         cand = all_tokens[j]
-                        # El ID estándar de archivo de Drive tiene exactamente 33 caracteres alfanuméricos
                         if len(cand) == 33 and re.match(r'^[a-zA-Z0-9_\-]+$', cand):
                             if cand not in seen_ids and cand != folder_id:
                                 files.append({"id": cand, "name": tok})
@@ -202,6 +200,7 @@ def procesar_pdf_local(pdf_path, chunk_index, file_name):
     id_base = file_name.replace(".pdf", "").replace(".PDF", "")
     timestamp_procesado = datetime.utcnow().isoformat()
     
+    # CAMBIO: Nomenclatura uniforme estricta de 4 dígitos f"{chunk_index:04d}"
     part_cuatro_digitos = f"{chunk_index:04d}"
     salida = JSON_CHUNKS_DIR / f"taqui_part{part_cuatro_digitos}.jsonl"
 
@@ -219,7 +218,7 @@ def procesar_pdf_local(pdf_path, chunk_index, file_name):
             }
             f.write(json.dumps(chunk_linea, ensure_ascii=False) + "\n")
             
-    print(f"  [OK] Chunk guardado -> {salida.name} (Fecha de Sesión: {fecha_acta})")
+    print(f"  [OK] Chunk guardado -> {salida} (Fecha de Sesión: {fecha_acta})")
     return True
 
 # =========================================================
@@ -232,7 +231,7 @@ def main():
         print("[INFO] Automatización saltada por calendario quincenal.")
         sys.exit(0)
 
-    print("[PROCESO] Analizando el catálogo de Drive...")
+    print("[PROCESO] Analizando el catálogo de Drive en subcarpeta 'taqui/'...")
     archivos_validos = listar_archivos_drive_publico(FOLDER_ID)
     
     if not archivos_validos:
@@ -246,7 +245,6 @@ def main():
     proximo_index_chunk = get_next_free_chunk_index()
     nuevos_hallazgos = 0
 
-    # Procesamiento Unitario Secuencial (Bajar -> Procesar -> Borrar)
     for f in archivos_validos:
         name = f["name"]
         file_id = f["id"]
@@ -261,7 +259,7 @@ def main():
         if descargar_pdf_drive(file_id, temp_pdf):
             exito = procesar_pdf_local(temp_pdf, proximo_index_chunk, name)
             if temp_pdf.exists():
-                temp_pdf.unlink()  # Borrado inmediato del PDF para liberar disco duro
+                temp_pdf.unlink()  # Borrado inmediato del PDF para liberar espacio
                 
             if exito:
                 proximo_index_chunk += 1
@@ -270,7 +268,7 @@ def main():
         else:
             print(f"  [⚠️] Falla al descargar archivo: {name}")
 
-    print(f"\n[INFO] Sincronización finalizada. Nuevos archivos JSONL guardados de 4 dígitos: {nuevos_hallazgos}")
+    print(f"\n[INFO] Sincronización finalizada en 'json_chunks/taqui/'. Chunks nuevos creados: {nuevos_hallazgos}")
 
 if __name__ == "__main__":
     main()
