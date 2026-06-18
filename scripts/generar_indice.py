@@ -91,24 +91,29 @@ def generar_indice():
                             
                         # --- LÓGICA DE FECHAS CORREGIDA ---
                         fecha_final = ""
+                        fecha_interna = chunk.get("fecha") or chunk.get("fecha_acta") or chunk.get("Fecha") or ""
+                        
                         if categoria == "licitaciones":
-                            texto_analisis = url + " " + archivo_pdf
-                            match_lici = re.search(r'(\d{3})(\d{2})\d', texto_analisis)
-                            if match_lici:
-                                fecha_final = f"20{match_lici.group(2)}-01-01"
+                            # NUEVO: Prioridad absoluta a la clave "fecha" del JSON de Licitaciones
+                            if fecha_interna:
+                                fecha_final = procesar_fecha(fecha_interna)
                             else:
-                                fecha_final = "2025-01-01"
+                                # Fallback por si hay un chunk muy viejo que todavía no tiene la propiedad "fecha"
+                                texto_analisis = url + " " + archivo_pdf
+                                match_lici = re.search(r'(\d{3})(\d{2})\d', texto_analisis)
+                                if match_lici:
+                                    fecha_final = f"20{match_lici.group(2)}-01-01"
+                                else:
+                                    fecha_final = "2025-01-01"
                         else:
-                            # Prioridad 1: Buscar los 8 dígitos (YYYYMMDD) en el código o archivo
+                            # Prioridad 1 para el resto: Buscar los 8 dígitos (YYYYMMDD) en el código o archivo
                             texto_analisis = str(codigo) + " " + str(archivo_pdf)
-                            # Regex busca años 19xx o 20xx seguidos de mes y día
                             match_ymd = re.search(r'((?:19|20)\d{2})(\d{2})(\d{2})', texto_analisis)
                             
                             if match_ymd:
                                 fecha_final = f"{match_ymd.group(1)}-{match_ymd.group(2)}-{match_ymd.group(3)}"
                             else:
                                 # Prioridad 2: Buscar en la clave 'fecha' o 'fecha_acta'
-                                fecha_interna = chunk.get("fecha") or chunk.get("fecha_acta") or chunk.get("Fecha") or ""
                                 fecha_final = procesar_fecha(fecha_interna)
 
                         # Objeto Licitación
