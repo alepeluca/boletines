@@ -4,161 +4,118 @@
 """
 generar_indice.py
 ----------------
-Genera un CSV limpio y consolidado. Agrupa por Archivo/URL.
+Genera un CSV consolidando versiones de licitaciones.
 """
 
 import json
 import csv
 import re
 from pathlib import Path
+from collections import defaultdict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 CHUNKS_DIR = BASE_DIR / "json_chunks"
 OUTPUT_CSV = BASE_DIR / "indice_documentos.csv"
 
 def mapear_categoria(ruta_archivo):
-    """Mapea la categoría mirando SOLO el nombre del archivo o su carpeta inmediata."""
-    identificador = (ruta_archivo.parent.name + "_" + ruta_archivo.name).lower()
-    
-    if "lici" in identificador:
+    # La carpeta json_chunks/lici/ indica la categoría
+    if "lici" in str(ruta_archivo):
         return "licitaciones"
-    elif "taqui" in identificador:
+    elif "taqui" in str(ruta_archivo):
         return "taquigraficas"
-    elif "orden" in identificador or "hcd" in identificador:
+    elif "orden" in str(ruta_archivo) or "hcd" in str(ruta_archivo):
         return "ordenes"
-    elif "bolet" in identificador:
+    elif "bolet" in str(ruta_archivo):
         return "boletines"
     return "otros"
 
-def limpiar_objeto_licitacion(fragmento):
+def extraer_info_licitacion(fragmento):
     match = re.search(r'OBJETO:\s*[“"\'«]?([^”"\'»\n\r]+)', fragmento, re.IGNORECASE)
     if match:
         return match.group(1).strip().title()
     return ""
 
-def procesar_fecha(fecha_raw):
-    if not fecha_raw:
-        return ""
-    fecha_str = str(fecha_raw).strip()
-    m_iso = re.search(r'(\d{4})-(\d{2})-(\d{2})', fecha_str)
-    if m_iso:
-        return m_iso.group(0)
-    m_lat = re.search(r'(\d{2})/(\d{2})/(\d{4})', fecha_str)
-    if m_lat:
-        return f"{m_lat.group(3)}-{m_lat.group(2)}-{m_lat.group(1)}"
-    return ""
-
 def generar_indice():
-    print("[INFO] Iniciando compilación de índice CSV corregido...")
+    print("[INFO] Iniciando compilación de índice CSV con agrupación de licitaciones...")
     
-    if not CHUNKS_DIR.exists():
-        print("[⚠️] No existe json_chunks. Saliendo.")
-        return
+    # Estructura: grupos[base_id] = { 'info': '...', 'items': [] }
+    grupos = defaultdict(lambda: {'info': None, 'items': []})
+    otros_documentos = []
 
     archivos_jsonl = list(CHUNKS_DIR.rglob("*.jsonl"))
-    documentos_unicos = {}
 
     for ruta_archivo in archivos_jsonl:
         categoria = mapear_categoria(ruta_archivo)
         
-        try:
-            with open(ruta_archivo, 'r', encoding='utf-8') as f:
-                for linea in f:
-                    linea = linea.strip()
-                    if not linea: continue
-                        
-                    try:
-                        chunk = json.loads(linea)
-                        
-                        url = chunk.get("url") or chunk.get("URL") or ""
-                        url = url.strip()
-                        
-                        archivo_pdf = chunk.get("archivo") or chunk.get("Archivo") or ""
-                        archivo_pdf = archivo_pdf.strip()
-                        
-                        codigo = chunk.get("codigo") or ""
-                        
-                        # CLAVE ÚNICA REAL
-                        clave = archivo_pdf if archivo_pdf else url
-                        if not clave:
-                            continue
+        with open(ruta_archivo, 'r', encoding='utf-8') as f:
+            for linea in f:
+                try:
+                    chunk = json.loads(linea)
+                    archivo_nombre = chunk.get("archivo", "")
+                    url = chunk.get("url", "")
+                    
+                    if categoria == "licitaciones":
+                        # Intentar extraer base ID: LiciPubli_033240-1.pdf -> 033240
+                        match = re.search(r'LiciPubli_(\d+)(?:-(\d+))?', archivo_nombre)
+                        if match:
+                            base_id = match.group(1)
+                            version = match.group(2) if match.group(2) else "1"
                             
-                        # Calcular páginas
-                        try:
-                            paginas = int(chunk.get("pagina") or chunk.get("pag") or 1)
-                        except:
-                            paginas = 1
+                            info = extraer_info_licitacion(chunk.get("fragmento", ""))
                             
-                        # --- LÓGICA DE FECHAS CORREGIDA ---
-                        fecha_final = ""
-                        fecha_interna = chunk.get("fecha") or chunk.get("fecha_acta") or chunk.get("Fecha") or ""
-                        
-                        if categoria == "licitaciones":
-                            # NUEVO: Prioridad absoluta a la clave "fecha" del JSON de Licitaciones
-                            if fecha_interna:
-                                fecha_final = procesar_fecha(fecha_interna)
-                            else:
-                                # Fallback por si hay un chunk muy viejo que todavía no tiene la propiedad "fecha"
-                                texto_analisis = url + " " + archivo_pdf
-                                match_lici = re.search(r'(\d{3})(\d{2})\d', texto_analisis)
-                                if match_lici:
-                                    fecha_final = f"20{match_lici.group(2)}-01-01"
-                                else:
-                                    fecha_final = "2025-01-01"
-                        else:
-                            # Prioridad 1 para el resto: Buscar los 8 dígitos (YYYYMMDD) en el código o archivo
-                            texto_analisis = str(codigo) + " " + str(archivo_pdf)
-                            match_ymd = re.search(r'((?:19|20)\d{2})(\d{2})(\d{2})', texto_analisis)
+                            # Si este chunk tiene info, guardarla como la buena para el grupo
+                            if info and not grupos[base_id]['info']:
+                                grupos[base_id]['info'] = info
                             
-                            if match_ymd:
-                                fecha_final = f"{match_ymd.group(1)}-{match_ymd.group(2)}-{match_ymd.group(3)}"
-                            else:
-                                # Prioridad 2: Buscar en la clave 'fecha' o 'fecha_acta'
-                                fecha_final = procesar_fecha(fecha_interna)
-
-                        # Objeto Licitación
-                        info_objeto = limpiar_objeto_licitacion(chunk.get("fragmento", "")) if categoria == "licitaciones" else ""
-
-                        # Agrupamiento
-                        if clave not in documentos_unicos:
-                            documentos_unicos[clave] = {
+                            grupos[base_id]['items'].append({
                                 "categoria": categoria,
                                 "url": url,
-                                "fecha": fecha_final,
-                                "info": info_objeto,
-                                "paginas": paginas
-                            }
+                                "archivo": archivo_nombre,
+                                "version": version,
+                                "fecha": chunk.get("fecha", ""),
+                                "paginas": chunk.get("pagina", 1)
+                            })
                         else:
-                            documentos_unicos[clave]["paginas"] = max(documentos_unicos[clave]["paginas"], paginas)
-                            
-                            if not documentos_unicos[clave]["url"] and url:
-                                documentos_unicos[clave]["url"] = url
-                                
-                            if not documentos_unicos[clave]["info"] and info_objeto:
-                                documentos_unicos[clave]["info"] = info_objeto
+                            # Caso raro que no siga el formato, tratar como otro
+                            otros_documentos.append({**chunk, "categoria": categoria, "info": ""})
+                    else:
+                        otros_documentos.append({**chunk, "categoria": categoria, "info": ""})
+                except:
+                    continue
 
-                    except json.JSONDecodeError:
-                        continue
-        except Exception as e:
-            print(f"[⚠️] Error al leer {ruta_archivo.name}: {e}")
-
+    # Escribir CSV
     columnas = ["categoria", "url", "fecha", "info", "paginas"]
-    try:
-        with open(OUTPUT_CSV, 'w', encoding='utf-8', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=columnas)
-            writer.writeheader()
+    
+    with open(OUTPUT_CSV, 'w', encoding='utf-8', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=columnas)
+        writer.writeheader()
+
+        # 1. Escribir Licitaciones procesadas
+        for base_id, grupo in grupos.items():
+            info_final = grupo['info'] if grupo['info'] else "Licitación sin descripción"
             
-            documentos_ordenados = sorted(
-                documentos_unicos.values(),
-                key=lambda x: x.get("fecha", ""),
-                reverse=True
-            )
-            for doc in documentos_ordenados:
-                writer.writerow(doc)
-                
-        print(f"[✅] CSV generado. Se agruparon correctamente en {len(documentos_ordenados)} documentos únicos.")
-    except Exception as e:
-        print(f"[❌] Error escribiendo CSV: {e}")
+            for item in grupo['items']:
+                # Aquí pegamos el nombre modificado: "Nombre (N)"
+                nombre_visual = f"{info_final}({item['version']})"
+                writer.writerow({
+                    "categoria": item['categoria'],
+                    "url": item['url'],
+                    "fecha": item['fecha'],
+                    "info": nombre_visual,
+                    "paginas": item['paginas']
+                })
+
+        # 2. Escribir el resto
+        for doc in otros_documentos:
+            writer.writerow({
+                "categoria": doc.get("categoria"),
+                "url": doc.get("url", ""),
+                "fecha": doc.get("fecha", ""),
+                "info": doc.get("info", ""),
+                "paginas": doc.get("pagina", 1)
+            })
+
+    print(f"[✅] CSV generado con {len(grupos)} grupos de licitaciones y {len(otros_documentos)} documentos extra.")
 
 if __name__ == "__main__":
     generar_indice()
