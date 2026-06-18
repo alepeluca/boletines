@@ -2,18 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-update_boletines.py — Versión 2.1.0
+update_boletines.py — Versión 2.1.1 (URLs Fix & Inyección Nativa)
 
 FLUJO:
 1. Detecta el último chunk existente en la subcarpeta 'bolet/'.
 2. Lee el último boletín guardado dentro de ese chunk.
 3. Calcula el siguiente boletín esperado.
-4. Scrapea la web oficial.
-5. Si el siguiente boletín existe, lo procesa y genera el nuevo chunk incremental con 4 dígitos.
-
-MEJORAS DE ARQUITECTURA:
-- Apunta nativamente a json_chunks/bolet/
-- Nomenclatura uniforme con padding de 4 ceros (_part_0001.jsonl)
+4. Scrapea la web oficial identificando si usa '-' o '_'.
+5. Si el siguiente boletín existe, lo procesa e inyecta la URL oficial exacta.
+6. Genera el nuevo chunk incremental con formato estricto de 4 dígitos.
 """
 
 import json
@@ -30,8 +27,8 @@ from bs4 import BeautifulSoup
 # CONFIG
 # =========================================================
 
-VERSION = "2.1.0"
-FECHA_MODIFICACION = "17-06-2026"
+VERSION = "2.1.1"
+FECHA_MODIFICACION = "18-06-2026"
 
 # Cambiado para que apunte directamente a la subcarpeta de boletines
 JSON_CHUNKS_DIR = Path("json_chunks/bolet")
@@ -144,6 +141,10 @@ def scrape_boletines_list():
 
 
 def construir_url_pdf(href, numero):
+    # Excepción explícita para el boletín 543
+    if str(numero) == "543":
+        return "https://quilmes.gov.ar/pdf/boletines/boletin_543.pdf"
+        
     if href.startswith("http"):
         return href
     if href.startswith(".."):
@@ -151,6 +152,12 @@ def construir_url_pdf(href, numero):
     if href.startswith("/"):
         return f"https://quilmes.gov.ar{href}"
 
+    # Extraemos la nomenclatura exacta con su separador original (- o _) desde el href
+    match = re.search(r"boletin([-_])\d+\.pdf", href, re.IGNORECASE)
+    if match:
+        return f"https://quilmes.gov.ar/pdf/boletines/{match.group(0)}"
+
+    # Fallback tradicional por si el href viene muy dañado
     return urljoin(PDF_BASE_URL, f"boletin-{numero}.pdf")
 
 
@@ -163,7 +170,7 @@ def download_pdf(url, numero):
     return destino
 
 
-def pdf_to_fragments(pdf_path: Path, fecha: str):
+def pdf_to_fragments(pdf_path: Path, fecha: str, url_oficial: str):
     print(f"[INFO] Procesando PDF {pdf_path.name}")
     doc = fitz.open(pdf_path)
 
@@ -178,8 +185,10 @@ def pdf_to_fragments(pdf_path: Path, fecha: str):
         if not text:
             continue
 
+        # CAMBIO: Inyectamos dinámicamente el campo 'url' oficial calculado
         frags.append({
             "id": f"{new_name}_p{i}_f0",
+            "url": url_oficial,
             "archivo": new_name,
             "pagina": i,
             "fragmento": text
@@ -231,7 +240,8 @@ def main():
 
     try:
         pdf = download_pdf(pdf_url, next_bolet)
-        frags = pdf_to_fragments(pdf, info["fecha"])
+        # Pasamos el pdf_url calculado para que se inyecte en cada fragmento
+        frags = pdf_to_fragments(pdf, info["fecha"], pdf_url)
 
         # Pasamos al generador el índice correlativo siguiente
         save_new_chunk(last_idx + 1, frags)
