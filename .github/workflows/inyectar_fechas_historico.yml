@@ -1,0 +1,55 @@
+name: Migración Única - Inyectar Fechas HEAD a Chunks Historicos
+
+on:
+  workflow_dispatch: # Permite ejecutarlo manualmente desde la pestaña Actions
+
+jobs:
+  inyectar-fechas:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Ejecutar Script de Inyección de Fechas
+        run: |
+          if [ -f "scripts/inyectar_fechas_head.py" ]; then
+            python scripts/inyectar_fechas_head.py
+          else
+            echo "❌ Error: No se encontró el script en scripts/inyectar_fechas_head.py"
+            exit 1
+          fi
+
+      - name: Confirmar y Subir Cambios a GitHub (Con Rebase Preventivo)
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Añadimos solo los cambios que ocurrieron en la carpeta de los chunks
+          git add json_chunks/
+          
+          # Verificamos si hubo cambios reales antes de hacer el commit
+          if git diff --staged --quiet; then
+            echo "[INFO] No se encontraron nuevas fechas que inyectar. Todo actualizado."
+          else
+            git commit -m "Automated: Inyección histórica de fechas HEAD en chunks JSONL"
+            
+            # Rebase preventivo por si entró un scraper en simultáneo
+            git pull --rebase origin main
+            
+            git push origin main
+            echo "[✅] Chunks históricos actualizados en GitHub correctamente."
+          fi
