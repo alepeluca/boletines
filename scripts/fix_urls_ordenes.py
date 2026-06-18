@@ -3,11 +3,11 @@ import glob
 from urllib.parse import quote
 
 def main():
-    # El ID de tu carpeta de Google Drive
-    FOLDER_ID = "1oWFnT-KijLjl315q-EcoDCi9XNRANTeJ"
+    # El ID de tu carpeta de Google Drive para las Actas Taquigráficas
+    FOLDER_ID = "1vBrQH0h1ddIlplj3ChZ0VkqAK8UjgecB"
     
-    # Busca recursivamente todos los archivos jsonl en json_chunks
-    archivos_jsonl = glob.glob('json_chunks/**/*.jsonl', recursive=True)
+    # Busca directamente en la subcarpeta de taquigráficas (ultra rápido)
+    archivos_jsonl = glob.glob('json_chunks/taqui/*.jsonl')
     
     archivos_modificados = 0
 
@@ -22,18 +22,21 @@ def main():
                     
                 data = json.loads(linea)
 
-                # Condición: si es una Orden del Día o si la URL actual es la de la carpeta
-                if "ORDEN DEL DIA" in data.get('codigo', '') or FOLDER_ID in data.get('url', ''):
+                # Condición: Si la URL actual es el link general de la carpeta
+                if FOLDER_ID in data.get('url', ''):
                     
-                    # Extraemos el nombre del archivo (asumiendo que es el código + .pdf)
-                    nombre_archivo = f"{data['codigo']}.pdf"
+                    # Usamos el campo 'archivo' que ya tiene el nombre completo con .pdf
+                    nombre_archivo = data.get('archivo')
+                    
+                    # Por si en algún chunk viejo no existía 'archivo', armamos el fallback
+                    if not nombre_archivo:
+                        nombre_archivo = f"{data['codigo']}.pdf"
 
-                    # Armamos una URL de búsqueda avanzada de Google Drive.
-                    # Esto buscará estrictamente ese archivo dentro de esa carpeta.
+                    # Armamos la URL de búsqueda avanzada de Google Drive
                     query = f'parent:{FOLDER_ID} title:"{nombre_archivo}"'
                     nueva_url = f"https://drive.google.com/drive/u/5/search?q={quote(query)}"
 
-                    # Si la URL vieja es distinta a la nueva, la actualizamos
+                    # Si la URL vieja es distinta a la nueva, actualizamos
                     if data.get('url') != nueva_url:
                         data['url'] = nueva_url
                         hubo_cambios = True
@@ -48,7 +51,7 @@ def main():
             print(f"✅ Corregido: {archivo}")
             archivos_modificados += 1
 
-    print(f"\n[INFO] Proceso terminado. Se corrigieron {archivos_modificados} archivos JSONL.")
+    print(f"\n[INFO] Proceso terminado. Se corrigieron {archivos_modificados} archivos JSONL de Taquigráficas.")
 
 if __name__ == "__main__":
     main()
