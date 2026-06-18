@@ -1,121 +1,68 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""
-generar_indice.py
-----------------
-Genera un CSV consolidando versiones de licitaciones.
-"""
-
-import json
 import csv
-import re
+import json
+import glob
 from pathlib import Path
-from collections import defaultdict
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-CHUNKS_DIR = BASE_DIR / "json_chunks"
-OUTPUT_CSV = BASE_DIR / "indice_documentos.csv"
+# ... (tus configuraciones previas) ...
 
-def mapear_categoria(ruta_archivo):
-    # La carpeta json_chunks/lici/ indica la categoría
-    if "lici" in str(ruta_archivo):
-        return "licitaciones"
-    elif "taqui" in str(ruta_archivo):
-        return "taquigraficas"
-    elif "orden" in str(ruta_archivo) or "hcd" in str(ruta_archivo):
-        return "ordenes"
-    elif "bolet" in str(ruta_archivo):
-        return "boletines"
-    return "otros"
-
-def extraer_info_licitacion(fragmento):
-    match = re.search(r'OBJETO:\s*[“"\'«]?([^”"\'»\n\r]+)', fragmento, re.IGNORECASE)
-    if match:
-        return match.group(1).strip().title()
-    return ""
-
-def generar_indice():
-    print("[INFO] Iniciando compilación de índice CSV con agrupación de licitaciones...")
+def compilar_indice():
+    archivos_jsonl = glob.glob('json_chunks/**/*.jsonl', recursive=True)
     
-    # Estructura: grupos[base_id] = { 'info': '...', 'items': [] }
-    grupos = defaultdict(lambda: {'info': None, 'items': []})
-    otros_documentos = []
-
-    archivos_jsonl = list(CHUNKS_DIR.rglob("*.jsonl"))
+    # Usamos un diccionario para agrupar por URL (así no hay duplicados)
+    documentos_unicos = {}
 
     for ruta_archivo in archivos_jsonl:
-        categoria = mapear_categoria(ruta_archivo)
-        
         with open(ruta_archivo, 'r', encoding='utf-8') as f:
             for linea in f:
-                try:
-                    chunk = json.loads(linea)
-                    archivo_nombre = chunk.get("archivo", "")
-                    url = chunk.get("url", "")
-                    
-                    if categoria == "licitaciones":
-                        # Intentar extraer base ID: LiciPubli_033240-1.pdf -> 033240
-                        match = re.search(r'LiciPubli_(\d+)(?:-(\d+))?', archivo_nombre)
-                        if match:
-                            base_id = match.group(1)
-                            version = match.group(2) if match.group(2) else "1"
-                            
-                            info = extraer_info_licitacion(chunk.get("fragmento", ""))
-                            
-                            # Si este chunk tiene info, guardarla como la buena para el grupo
-                            if info and not grupos[base_id]['info']:
-                                grupos[base_id]['info'] = info
-                            
-                            grupos[base_id]['items'].append({
-                                "categoria": categoria,
-                                "url": url,
-                                "archivo": archivo_nombre,
-                                "version": version,
-                                "fecha": chunk.get("fecha", ""),
-                                "paginas": chunk.get("pagina", 1)
-                            })
-                        else:
-                            # Caso raro que no siga el formato, tratar como otro
-                            otros_documentos.append({**chunk, "categoria": categoria, "info": ""})
-                    else:
-                        otros_documentos.append({**chunk, "categoria": categoria, "info": ""})
-                except:
+                if not linea.strip():
                     continue
+                
+                datos = json.loads(linea)
+                url = datos.get('url', '')
+                
+                # Si es la primera vez que vemos este PDF, lo guardamos
+                if url not in documentos_unicos:
+                    # Extraer categoría de la ruta (boletines, lici, taqui, orden)
+                    categoria = "boletines" # (Ajusta tu lógica de categoría acá)
+                    if "lici" in ruta_archivo: categoria = "licitaciones"
+                    elif "taqui" in ruta_archivo: categoria = "taquigraficas"
+                    elif "orden" in ruta_archivo: categoria = "ordenes"
 
-    # Escribir CSV
-    columnas = ["categoria", "url", "fecha", "info", "paginas"]
-    
-    with open(OUTPUT_CSV, 'w', encoding='utf-8', newline='') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=columnas)
+                    # Extraer info clave (como hacías con el OBJETO de las licitaciones)
+                    extra_info = ""
+                    if categoria == "licitaciones" and "OBJETO:" in datos.get('fragmento', ''):
+                        # Extrae las primeras 5 palabras después de OBJETO:
+                        fragmento = datos['fragmento']
+                        try:
+                            obj_texto = fragmento.split('OBJETO:')[1].strip()
+                            extra_info = " ".join(obj_texto.split()[:5]) + "..."
+                        except:
+                            pass
+
+                    # Guardamos la fila maestra del documento
+                    documentos_unicos[url] = {
+                        'categoria': categoria,
+                        'archivo': datos.get('archivo', ''),
+                        'url': url,
+                        'fecha': datos.get('procesado', '')[:10], # o tu lógica de fecha
+                        'extra_info': extra_info,
+                        'paginas': 1, # Empezamos a contar
+                        'fragmento': datos.get('fragmento', '')[:200] # Solo guardamos un poquito del inicio
+                    }
+                else:
+                    # Si ya lo vimos (es la página 2, 3, etc.), solo le sumamos 1 al contador de páginas
+                    documentos_unicos[url]['paginas'] += 1
+
+    # Ahora sí, escribimos el CSV con solo 1 fila por documento
+    with open('indice_documentos.csv', 'w', newline='', encoding='utf-8') as f_csv:
+        columnas = ['categoria', 'archivo', 'url', 'fecha', 'extra_info', 'paginas', 'fragmento']
+        writer = csv.DictWriter(f_csv, fieldnames=columnas)
         writer.writeheader()
+        
+        for doc in documentos_unicos.values():
+            writer.writerow(doc)
 
-        # 1. Escribir Licitaciones procesadas
-        for base_id, grupo in grupos.items():
-            info_final = grupo['info'] if grupo['info'] else "Licitación sin descripción"
-            
-            for item in grupo['items']:
-                # Aquí pegamos el nombre modificado: "Nombre (N)"
-                nombre_visual = f"{info_final}({item['version']})"
-                writer.writerow({
-                    "categoria": item['categoria'],
-                    "url": item['url'],
-                    "fecha": item['fecha'],
-                    "info": nombre_visual,
-                    "paginas": item['paginas']
-                })
+    print(f"✅ Índice compilado con éxito. Total de documentos únicos: {len(documentos_unicos)}")
 
-        # 2. Escribir el resto
-        for doc in otros_documentos:
-            writer.writerow({
-                "categoria": doc.get("categoria"),
-                "url": doc.get("url", ""),
-                "fecha": doc.get("fecha", ""),
-                "info": doc.get("info", ""),
-                "paginas": doc.get("pagina", 1)
-            })
-
-    print(f"[✅] CSV generado con {len(grupos)} grupos de licitaciones y {len(otros_documentos)} documentos extra.")
-
-if __name__ == "__main__":
-    generar_indice()
+if __name__ == '__main__':
+    compilar_indice()
