@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-update_taquigraficas.py — Versión 2.3.0
+update_taquigraficas.py — Versión 2.3.1 (URLs Fix)
 
 FLUJO HYPER-ROBUSTO CON SUBDIR 'taqui' Y FORMATO 4 DÍGITOS f"{idx:04d}":
 1. Verifica el calendario quincenal (o atiende la bandera manual --force).
@@ -10,6 +10,7 @@ FLUJO HYPER-ROBUSTO CON SUBDIR 'taqui' Y FORMATO 4 DÍGITOS f"{idx:04d}":
 3. Escanea la subcarpeta exclusiva 'json_chunks/taqui/' para saber el último index.
 4. Filtra actas válidas (YYYYMMDD*.pdf) y las ordena de la más vieja a la más nueva.
 5. Descarga, procesa y elimina de forma secuencial una por una para cuidar los recursos.
+6. Guarda el chunk con la URL de búsqueda exacta de Drive.
 """
 
 import json
@@ -19,11 +20,12 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import quote  # <-- AGREGADO PARA ARMAR LA URL EXACTA
 import requests
 import fitz  # PyMuPDF
 
-VERSION = "2.3.0"
-FECHA_MODIFICACION = "17-06-2026"
+VERSION = "2.3.1"
+FECHA_MODIFICACION = "18-06-2026"
 
 # Cambiado para que opere directamente en la subcarpeta 'taqui'
 JSON_CHUNKS_DIR = Path("json_chunks/taqui")
@@ -204,11 +206,15 @@ def procesar_pdf_local(pdf_path, chunk_index, file_name):
     part_cuatro_digitos = f"{chunk_index:04d}"
     salida = JSON_CHUNKS_DIR / f"taqui_part{part_cuatro_digitos}.jsonl"
 
+    # <-- AGREGADO: Armamos la URL exacta de búsqueda de Google Drive -->
+    query = f'parent:{FOLDER_ID} title:"{file_name}"'
+    nueva_url_drive = f"https://drive.google.com/drive/u/5/search?q={quote(query)}"
+
     with open(salida, "w", encoding="utf-8") as f:
         for f_data in frags_finales:
             chunk_linea = {
                 "codigo": id_base,
-                "url": DRIVE_FOLDER_URL,
+                "url": nueva_url_drive,  # <-- CAMBIO: Ahora guarda la URL individual correcta
                 "archivo": file_name,
                 "id": f"{id_base}_p{f_data['pagina']}_f0",
                 "pagina": f_data['pagina'],
