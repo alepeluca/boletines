@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-update_ordenes.py — Versión 1.1.0 (Edición Órdenes del Día con OCR)
+update_ordenes.py — Versión 1.1.1 (Edición Órdenes del Día con OCR - URLs Fix)
 
 FLUJO CONTROLADO SECUENCIAL:
 1. Verifica el calendario quincenal (o atiende la bandera manual --force).
@@ -11,7 +11,7 @@ FLUJO CONTROLADO SECUENCIAL:
 4. Filtra archivos válidos (YYYYMMDD*.pdf) y los ordena del más antiguo al más nuevo.
 5. Descarga secuencialmente uno por uno.
 6. Aplica OCR con Tesseract página por página cuidando la memoria del servidor.
-7. Guarda el chunk normalizado a 4 dígitos en su subcarpeta correspondiente.
+7. Guarda el chunk normalizado a 4 dígitos en su subcarpeta correspondiente con URL exacta.
 """
 
 import json
@@ -22,13 +22,14 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import quote  # <-- AGREGADO PARA ARMAR LA URL EXACTA
 import requests
 import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 
-VERSION = "1.1.0"
-FECHA_MODIFICACION = "17-06-2026"
+VERSION = "1.1.1"
+FECHA_MODIFICACION = "18-06-2026"
 
 # Cambiado para apuntar nativamente a la subcarpeta 'orden'
 JSON_CHUNKS_DIR = Path("json_chunks/orden")
@@ -212,11 +213,15 @@ def procesar_pdf_local_ocr(pdf_path, chunk_index, file_name):
     part_cuatro_digitos = f"{chunk_index:04d}"
     salida = JSON_CHUNKS_DIR / f"{PREFIX}{part_cuatro_digitos}.jsonl"
 
+    # <-- AGREGADO: Armamos la URL exacta de búsqueda de Google Drive -->
+    query = f'parent:{FOLDER_ID} title:"{file_name}"'
+    nueva_url_drive = f"https://drive.google.com/drive/u/5/search?q={quote(query)}"
+
     with open(salida, "w", encoding="utf-8") as f:
         for f_data in frags_finales:
             chunk_linea = {
                 "codigo": id_base,
-                "url": DRIVE_FOLDER_URL,
+                "url": nueva_url_drive,  # <-- CAMBIO: Ahora guarda la URL individual correcta
                 "archivo": file_name,
                 "id": f"{id_base}_p{f_data['pagina']}_f0",
                 "pagina": f_data['pagina'],
