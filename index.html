@@ -6,7 +6,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Mohave', sans-serif; margin: 2rem auto; max-width: 1200px; background: #f0f0f0; display: flex; flex-direction: column; align-items: center; }
-    #ultimaActualizacion { font-weight: bold; margin-bottom: 1rem; width: 100%; max-width: 900px; }
+    #ultimaActualizacion { width: 100%; max-width: 900px; margin-bottom: 1rem; }
     #searchContainer, #dateContainer { width: 100%; max-width: 900px; margin-bottom: 1rem; }
     #searchOptions, #categoryOptions { display: flex; gap: 1rem; margin-bottom: 1rem; justify-content: center; flex-wrap: wrap; }
     #categoryOptions { background: #e2e8f0; padding: 0.7rem; border-radius: 8px; border: 1px solid #cbd5e1; }
@@ -30,12 +30,16 @@
     #pdfPreview iframe { width: 100%; height: 600px; border: none; }
     #status, #contador { width: 100%; text-align: center; margin: .5rem 0; }
     progress { width: 100%; max-width: 900px; }
-    #version { margin-top: 1rem; color: #666; font-size: .9rem; }
+    #version { margin-top: 1rem; color: #666; font-size: .9rem; font-weight: bold; }
   </style>
 </head>
 <body>
 
-  <div id="ultimaActualizacion">Sincronizando con base de datos remota…</div>
+  <div id="ultimaActualizacion">
+    <div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.8rem; font-size:0.9rem; background:#fff; padding:0.8rem; border-radius:6px; border:1px solid #ccc; justify-content:center;">
+      <span style="font-weight:bold; margin-right: 0.2rem;">Actualizado hasta:</span> Sincronizando...
+    </div>
+  </div>
 
   <div id="searchContainer">
     <div id="categoryOptions">
@@ -70,7 +74,7 @@
     
     <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.8rem;">
       <label>Filtrar Año: <select id="descFiltroAnno"><option value="TODOS">Todos los años</option></select></label>
-      <label><input type="checkbox" id="descDesagregarMensual" checked> Desagregar meses</label>
+      <label><input type="checkbox" id="descDesagregarMensual"> Desagregar meses</label>
       <span id="descCargandoStatus" style="font-size:0.85rem; color:#666; font-style:italic;">Leyendo índice unificado…</span>
     </div>
     
@@ -83,7 +87,7 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V1.1.0 (Estructura Corregida)</div>
+  <div id="version">V1.1.2</div>
 
 <script>
   const ultimaDiv = document.getElementById('ultimaActualizacion');
@@ -113,12 +117,10 @@
     hcd_taqui: { label: 'HCD Taquigráfica', badgeClass: 'badge-taqui', resultClass: 'hcd_taqui', colorHex: '#9b59b6' }
   };
 
-  // Parser dinámico inteligente
   function parsearCSV(text) {
     const lines = text.split(/\r?\n/);
     if (lines.length === 0) return [];
     
-    // Obtenemos los nombres de las columnas limpias del primer renglón
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
     const rows = [];
 
@@ -132,37 +134,107 @@
 
       for (let j = 0; j < line.length; j++) {
         let char = line[j];
-        if (char === '"') {
-          insideQuote = !insideQuote;
-        } else if (char === ',' && !insideQuote) {
-          arr.push(entry.trim());
-          entry = '';
-        } else {
-          entry += char;
-        }
+        if (char === '"') insideQuote = !insideQuote;
+        else if (char === ',' && !insideQuote) { arr.push(entry.trim()); entry = ''; }
+        else entry += char;
       }
       arr.push(entry.trim());
 
       if (arr.length >= headers.length) {
         let obj = {};
-        // Asignamos dinámicamente por posición y por el nombre de columna detectado
         headers.forEach((h, index) => {
           let val = arr[index] ? arr[index].replace(/^"|"$/g, '') : '';
           obj[h] = val;
         });
         
-        // Mapeos posicionales de respaldo por si varían acentos o nombres de cabeceras
-        obj.categoria = obj.categoria || arr[0];
+        // Mapeo Inteligente Anti-Errores (Punto 3)
+        obj.categoria = obj.categoria || arr[0] || '';
+        let catLow = obj.categoria.toLowerCase();
+        if (catLow.includes('bolet')) obj.categoria = 'boletines';
+        else if (catLow.includes('lici')) obj.categoria = 'licitaciones';
+        else if (catLow.includes('orden')) obj.categoria = 'hcd_orden';
+        else if (catLow.includes('taqui')) obj.categoria = 'hcd_taqui';
+
         obj.archivo = obj.archivo || arr[1];
         obj.url = obj.url || arr[2];
         obj.fecha = obj.fecha || arr[3];
         obj.extra_info = obj.extra_info || arr[4];
-        obj.pagina = arr[5] || '1';
+        obj.pagina = obj.pagina || arr[5] || '1';
         
         rows.push(obj);
       }
     }
     return rows;
+  }
+
+  // Sanitizador de Fechas Extremas y Expedientes (Punto 7)
+  function obtenerDatosFecha(obj) {
+    let rawFecha = obj.fecha ? obj.fecha.replace(/[^\d-]/g, '') : '';
+    
+    // 1. Probar formato válido (Entre 1980 y 2029)
+    let matchStandard = rawFecha.match(/^(19[89]\d|20[012]\d)[-]?([01]\d)[-]?([0-3]\d)$/);
+    if (matchStandard) {
+      return {
+        sortable: matchStandard[1] + matchStandard[2] + matchStandard[3],
+        display: `${matchStandard[3]}/${matchStandard[2]}/${matchStandard[1]}`,
+        year: matchStandard[1], month: matchStandard[2]
+      };
+    }
+
+    // 2. Si no es válido (ej. Exp 2882-41-10), buscar un año real oculto en texto
+    let textoTarget = (obj.archivo || '') + ' ' + (obj.extra_info || '');
+    let matchYear = textoTarget.match(/\b(19[89]\d|20[012]\d)\b/);
+    if (matchYear) {
+      return {
+        sortable: matchYear[1] + "0101",
+        display: `Año ${matchYear[1]}`,
+        year: matchYear[1], month: "01"
+      };
+    }
+
+    // Fallback absoluto "Sin Fecha"
+    return { sortable: "19000101", display: "S/F", year: "N/D", month: "01" };
+  }
+
+  // Limpiador de Códigos / Números de Boletines (Punto 1)
+  function extraerCodigoLimpio(obj) {
+    if (obj.categoria === 'boletines') {
+      const m = (obj.url || obj.archivo || '').match(/boletin[-_](\d+)/i);
+      if (m) return m[1];
+    } else if (obj.categoria === 'licitaciones') {
+      const m = (obj.url || '').match(/\/([^\/]+)\.pdf$/i);
+      if (m) return m[1];
+      const m2 = (obj.archivo || '').match(/LiciPubli_([0-9-]+)_/i);
+      if (m2) return m2[1];
+    } else {
+      const m = (obj.url || '').match(/\/([^\/]+)\.pdf$/i);
+      if (m) return m[1];
+      const m2 = (obj.archivo || '').match(/_part([0-9]+)/i);
+      if (m2) return m2[1];
+    }
+    return 'S/N';
+  }
+
+  function autocompletarFechas() {
+    let minSortable = '99999999';
+    let maxSortable = '00000000';
+    
+    baseDocumentosIndexados.forEach(obj => {
+      const s = obj.datosFecha.sortable;
+      if (s !== '19000101' && s.length === 8) {
+        if (s < minSortable) minSortable = s;
+        if (s > maxSortable) maxSortable = s;
+      }
+    });
+    
+    if (minSortable !== '99999999') {
+      desdeInput.value = `${minSortable.slice(0,4)}-${minSortable.slice(4,6)}`;
+    }
+    
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    hastaInput.value = `${yyyy}-${mm}`;
   }
 
   async function cargarBaseDeDatosCSV() {
@@ -175,43 +247,26 @@
       progressBar.value = 70;
       
       baseDocumentosIndexados = parsearCSV(textoCSV);
+      
+      // Sanitizar datos desde la carga
+      baseDocumentosIndexados.forEach(obj => { obj.datosFecha = obtenerDatosFecha(obj); });
+      
       progressBar.value = 100;
+      descCargandoStatus.textContent = ""; // Punto 9: Borrar mensaje de éxito local
       
-      descCargandoStatus.textContent = "✓ Índice local cargado";
-      
+      autocompletarFechas(); // Punto 5: Autocompletar Desde/Hasta
       procesarMetadatosYDescargas();
       mostrarUltimaActualizacion();
     } catch (err) {
       console.error(err);
       descCargandoStatus.textContent = "❌ Error cargando CSV";
-      ultimaDiv.textContent = "Error al inicializar la base de datos remota.";
+      ultimaDiv.innerHTML = "Error al inicializar la base de datos remota.";
     }
-  }
-
-  // Extrae de forma segura una fecha YYYYMMDD para ordenamiento y lógica de calendarios
-  function obtenerFechaYYYYMMDD(obj) {
-    if (obj.fecha && /^\d{8}$/.test(obj.fecha)) return obj.fecha;
-    if (obj.fecha && /^\d{4}-\d{2}-\d{2}$/.test(obj.fecha)) return obj.fecha.replace(/-/g, '');
-    
-    // Si en 'fecha' viene el número de Expediente (como '2882-41-10'), buscamos el año real en el nombre del archivo
-    const matchAnno = obj.archivo ? obj.archivo.match(/(202\d)/) : null;
-    if (matchAnno) return matchAnno[1] + "0101"; 
-    
-    return "20260101"; // Fallback por defecto para mantener consistencia este año
-  }
-
-  // Intenta extraer el identificador limpio (ej: 052250-1) de la URL o el archivo
-  function extraerCodigoLimpio(obj) {
-    if (obj.url) {
-      const matchUrl = obj.url.match(/\/([^\/]+)\.pdf$/);
-      if (matchUrl) return matchUrl[1];
-    }
-    const matchArchivo = obj.archivo ? obj.archivo.match(/_([0-9-]+)_/) : null;
-    return matchArchivo ? matchArchivo[1] : (obj.fecha && obj.fecha.includes('-') ? obj.fecha : 'S/N');
   }
 
   function mostrarUltimaActualizacion() {
-    ultimaDiv.innerHTML = '<div style="display:flex; flex-wrap:wrap; gap:0.8rem; font-size:0.85rem; background:#fff; padding:0.6rem; border-radius:6px; border:1px solid #ccc; justify-content:center;"></div>';
+    ultimaDiv.innerHTML = '<div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.8rem; font-size:0.9rem; background:#fff; padding:0.8rem; border-radius:6px; border:1px solid #ccc; justify-content:center;">' +
+                          '<span style="font-weight:bold; margin-right: 0.2rem;">Actualizado hasta:</span></div>';
     const container = ultimaDiv.firstChild;
 
     Object.keys(CONFIG_CATEGORIAS).forEach(key => {
@@ -223,11 +278,13 @@
         return;
       }
 
-      subGrupo.sort((a,b) => obtenerFechaYYYYMMDD(b).localeCompare(obtenerFechaYYYYMMDD(a)));
+      // Ordenado real ignorando 2882 y anexando fecha (Punto 2)
+      subGrupo.sort((a,b) => b.datosFecha.sortable.localeCompare(a.datosFecha.sortable));
       const ultimo = subGrupo[0];
       const idDoc = extraerCodigoLimpio(ultimo);
+      const fechaDisplay = ultimo.datosFecha.display !== 'S/F' ? ` (${ultimo.datosFecha.display})` : '';
       
-      container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>${conf.label}:</strong> N.º ${idDoc}</span>`;
+      container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>${conf.label}:</strong> N.º ${idDoc}${fechaDisplay}</span>`;
     });
   }
 
@@ -264,22 +321,20 @@
     else if (mode === 'or') regex = new RegExp(q.split('|').join('|'), 'i');
     else regex = new RegExp(q, 'i');
 
-    // Buscamos dentro de 'extra_info' (el fragmento indexado) o en el nombre del archivo
     let matches = baseDocumentosIndexados.filter(obj => {
       if (!categoriasActivas.includes(obj.categoria)) return false;
       const textoTarget = (obj.extra_info || '') + ' ' + (obj.archivo || '');
       return regex.test(textoTarget);
     });
 
-    // Filtros de fecha mensuales
     const desde = desdeInput.value ? desdeInput.value.replace(/-/g, '') + '00' : null;
     const hasta = hastaInput.value ? hastaInput.value.replace(/-/g, '') + '32' : null;
 
-    if (desde) matches = matches.filter(m => obtenerFechaYYYYMMDD(m) >= desde);
-    if (hasta) matches = matches.filter(m => obtenerFechaYYYYMMDD(m) <= hasta);
+    if (desde) matches = matches.filter(m => m.datosFecha.sortable >= desde);
+    if (hasta) matches = matches.filter(m => m.datosFecha.sortable <= hasta);
 
     matches.sort((a, b) => {
-      const da = obtenerFechaYYYYMMDD(a), db = obtenerFechaYYYYMMDD(b);
+      const da = a.datosFecha.sortable, db = b.datosFecha.sortable;
       return ordenSelect.value === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
     });
 
@@ -291,18 +346,19 @@
     }
 
     contadorDiv.textContent = `${matches.length} resultados`;
-    
-    // Auto-precarga el primer PDF
     const primero = matches[0];
     cargarPDF(`${primero.url}#page=${primero.pagina || 1}`);
 
     matches.forEach(m => {
-      const fechaRaw = obtenerFechaYYYYMMDD(m);
-      const anno = fechaRaw.slice(0, 4);
       const idDoc = extraerCodigoLimpio(m);
+      const rawFechaStr = m.fecha ? m.fecha : '';
       
-      // Si la columna fecha contiene un expediente real lo añadimos como dato extra visible
-      const expDato = m.fecha && m.fecha.includes('-') ? ` (Exp. ${m.fecha})` : '';
+      // Si la fecha original tiene un formato de Expediente y no estándar, lo mostramos aparte.
+      let expDato = '';
+      if (rawFechaStr && !rawFechaStr.match(/^(19[89]\d|20[012]\d)[-]?([01]\d)[-]?([0-3]\d)$/) && rawFechaStr.includes('-')) {
+        expDato = ` (Exp. ${rawFechaStr})`;
+      }
+
       const conf = CONFIG_CATEGORIAS[m.categoria] || { label: 'Documento', badgeClass: '', resultClass: '', colorHex: '#666' };
 
       const div = document.createElement('div');
@@ -310,7 +366,7 @@
       div.innerHTML = `
         <div class="linea">
           <span class="badge ${conf.badgeClass}">${conf.label}</span>
-          <a href="${m.url}" target="_blank">${conf.label} N.º ${idDoc}${expDato} – Año ${anno}</a> (pág. ${m.pagina || 1})
+          <a href="${m.url}" target="_blank">${conf.label} N.º ${idDoc}${expDato} – ${m.datosFecha.display}</a> (pág. ${m.pagina || 1})
         </div>
         <div class="fragmento">${(m.extra_info || 'Sin descripción').replace(regex, '<mark>$&</mark>')}</div>
       `;
@@ -329,28 +385,34 @@
     baseDocumentosIndexados.forEach(obj => {
       if (!obj.url) return;
       if (!mapeoDocsUnicos[obj.url]) {
-        const fecha8 = obtenerFechaYYYYMMDD(obj);
-        const anno = fecha8.slice(0, 4);
-        const mes = fecha8.slice(4, 6);
-        annosExistentes.add(anno);
+        const dF = obj.datosFecha;
+        if (dF.year !== 'N/D') annosExistentes.add(dF.year);
 
         mapeoDocsUnicos[obj.url] = {
           url: obj.url,
           categoriaKey: obj.categoria,
-          anno: anno,
-          mes: mes,
+          anno: dF.year,
+          mes: dF.month,
           identificador: extraerCodigoLimpio(obj),
-          fecha8: fecha8
+          datosFecha: dF
         };
       }
     });
 
     documentosUnicosParaDescarga = Object.values(mapeoDocsUnicos);
     
+    // Punto 8: Cargar el año actual y "Todos los años"
     descFiltroAnno.innerHTML = '<option value="TODOS">Todos los años</option>';
     Array.from(annosExistentes).sort((a, b) => b.localeCompare(a)).forEach(a => {
       descFiltroAnno.innerHTML += `<option value="${a}">${a}</option>`;
     });
+
+    const todayYear = new Date().getFullYear().toString();
+    if (annosExistentes.has(todayYear)) {
+      descFiltroAnno.value = todayYear;
+    } else {
+      descFiltroAnno.value = "TODOS";
+    }
 
     renderizarEnlacesIndice();
   }
@@ -378,7 +440,7 @@
     });
 
     if (annoFiltro !== 'TODOS') filtrados = filtrados.filter(d => d.anno === annoFiltro);
-    filtrados.sort((a, b) => b.fecha8.localeCompare(a.fecha8));
+    filtrados.sort((a, b) => b.datosFecha.sortable.localeCompare(a.datosFecha.sortable));
 
     descContenedorEnlaces.innerHTML = '';
     const mesesNombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
