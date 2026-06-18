@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-update_licitaciones.py — Versión 6.2.0 (Modo Vigilancia Activa)
+update_licitaciones.py — Versión 6.3.0 (Modo Vigilancia Activa + Fecha HEAD)
 
 FLUJO DIARIO AUTOMÁTICO CON SUBDIR 'lici' Y FORMATO 4 DÍGITOS f"{idx:04d}":
 1. Escanea la carpeta 'json_chunks/lici/' para saber cuál fue la última licitación procesada.
 2. Setea el inicio de monitoreo de años correlativos.
 3. Prueba la existencia de las URLs en el servidor municipal (controlando subpliegos Z).
-4. Si encuentra algo nuevo: aplica OCR con Tesseract, extrae el OBJETO en CamelCase
-   y guarda el chunk en 'json_chunks/lici/lici_partNNNN.jsonl'
+4. Si encuentra algo nuevo: aplica OCR con Tesseract, extrae el OBJETO en CamelCase,
+   captura la fecha Last-Modified y guarda el chunk en 'json_chunks/lici/lici_partNNNN.jsonl'
 """
 
 import json
@@ -19,6 +19,7 @@ import io
 import time
 import random
 from datetime import datetime
+from email.utils import parsedate_to_datetime  # <-- NUEVO: Para procesar la fecha del servidor
 from pathlib import Path
 import requests
 import fitz  # PyMuPDF
@@ -29,7 +30,7 @@ from PIL import Image
 # CONFIG
 # =========================================================
 
-VERSION = "6.2.0"
+VERSION = "6.3.0"
 FECHA_MODIFICACION = "17-06-2026"
 
 # Cambiado para que opere directamente en la subcarpeta 'lici'
@@ -132,6 +133,17 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
     if "pdf" not in content_type:
         return False
 
+    # --- NUEVO: Extraer la fecha Last-Modified del servidor ---
+    last_modified = response.headers.get("Last-Modified")
+    fecha_publicacion = "2026-01-01"  # Fallback de seguridad
+    if last_modified:
+        try:
+            dt = parsedate_to_datetime(last_modified)
+            fecha_publicacion = dt.strftime("%Y-%m-%d")
+        except Exception:
+            pass
+    # ----------------------------------------------------------
+
     frags_finales = []
     texto_p1 = ""
 
@@ -158,7 +170,7 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
         nombre_archivo_virtual = f"LiciPubli_{codigo_completo}_{objeto_camel}.pdf"
         timestamp_procesado = datetime.utcnow().isoformat()
         
-        # CAMBIO STREMEDAL: Estandarizar nombre con relleno de 4 ceros lici_partNNNN.jsonl
+        # Estandarizar nombre con relleno de 4 ceros lici_partNNNN.jsonl
         salida = JSON_CHUNKS_DIR / f"lici_part{chunk_index:04d}.jsonl"
         
         with open(salida, "w", encoding="utf-8") as f:
@@ -170,10 +182,11 @@ def procesar_y_guardar_pdf(url, codigo_completo, chunk_index):
                     "id": f"{nombre_archivo_virtual}_p{f_data['pagina']}_f0",
                     "pagina": f_data['pagina'],
                     "fragmento": f_data['fragmento'],
+                    "fecha": fecha_publicacion,  # <-- NUEVO: Se inyecta la fecha acá
                     "procesado": timestamp_procesado
                 }
                 f.write(json.dumps(chunk_linea, ensure_ascii=False) + "\n")
-        print(f"[OK] NUEVA LICITACIÓN DETECTADA Y GUARDADA: {salida}")
+        print(f"[OK] NUEVA LICITACIÓN DETECTADA Y GUARDADA: {salida} | Fecha Pub: {fecha_publicacion}")
         return True
     return False
 
