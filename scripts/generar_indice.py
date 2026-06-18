@@ -18,11 +18,8 @@ OUTPUT_CSV = BASE_DIR / "indice_documentos.csv"
 
 def mapear_categoria(ruta_archivo):
     """Mapea la categoría mirando SOLO el nombre del archivo o su carpeta inmediata."""
-    # ruta_archivo.name = "lici_part_001.jsonl"
-    # ruta_archivo.parent.name = "lici"
     identificador = (ruta_archivo.parent.name + "_" + ruta_archivo.name).lower()
     
-    # El orden de los IF importa. Descartamos primero los específicos.
     if "lici" in identificador:
         return "licitaciones"
     elif "taqui" in identificador:
@@ -79,11 +76,12 @@ def generar_indice():
                         archivo_pdf = chunk.get("archivo") or chunk.get("Archivo") or ""
                         archivo_pdf = archivo_pdf.strip()
                         
-                        # CLAVE ÚNICA REAL: Priorizamos el archivo PDF físico, si no, la URL.
-                        # Esto asegura que todas las páginas del mismo PDF caigan en la misma fila.
+                        codigo = chunk.get("codigo") or ""
+                        
+                        # CLAVE ÚNICA REAL
                         clave = archivo_pdf if archivo_pdf else url
                         if not clave:
-                            continue # Si no tiene nombre ni url, es un fragmento corrupto, se descarta.
+                            continue
                             
                         # Calcular páginas
                         try:
@@ -91,7 +89,7 @@ def generar_indice():
                         except:
                             paginas = 1
                             
-                        # Extraer fecha
+                        # --- LÓGICA DE FECHAS CORREGIDA ---
                         fecha_final = ""
                         if categoria == "licitaciones":
                             texto_analisis = url + " " + archivo_pdf
@@ -101,12 +99,17 @@ def generar_indice():
                             else:
                                 fecha_final = "2025-01-01"
                         else:
-                            fecha_chunk = chunk.get("fecha") or chunk.get("Fecha") or chunk.get("procesado") or ""
-                            fecha_final = procesar_fecha(fecha_chunk)
-                            if not fecha_final:
-                                match_texto = re.search(r'(\d{4})(\d{2})(\d{2})', url + " " + archivo_pdf)
-                                if match_texto:
-                                    fecha_final = f"{match_texto.group(1)}-{match_texto.group(2)}-{match_texto.group(3)}"
+                            # Prioridad 1: Buscar los 8 dígitos (YYYYMMDD) en el código o archivo
+                            texto_analisis = str(codigo) + " " + str(archivo_pdf)
+                            # Regex busca años 19xx o 20xx seguidos de mes y día
+                            match_ymd = re.search(r'((?:19|20)\d{2})(\d{2})(\d{2})', texto_analisis)
+                            
+                            if match_ymd:
+                                fecha_final = f"{match_ymd.group(1)}-{match_ymd.group(2)}-{match_ymd.group(3)}"
+                            else:
+                                # Prioridad 2: Buscar en la clave 'fecha' o 'fecha_acta'
+                                fecha_interna = chunk.get("fecha") or chunk.get("fecha_acta") or chunk.get("Fecha") or ""
+                                fecha_final = procesar_fecha(fecha_interna)
 
                         # Objeto Licitación
                         info_objeto = limpiar_objeto_licitacion(chunk.get("fragmento", "")) if categoria == "licitaciones" else ""
@@ -121,14 +124,11 @@ def generar_indice():
                                 "paginas": paginas
                             }
                         else:
-                            # Si ya existe, nos quedamos con el número de página más alto
                             documentos_unicos[clave]["paginas"] = max(documentos_unicos[clave]["paginas"], paginas)
                             
-                            # Si no tenía URL pero este chunk sí lo tiene, lo guardamos
                             if not documentos_unicos[clave]["url"] and url:
                                 documentos_unicos[clave]["url"] = url
                                 
-                            # Lo mismo para la información de la licitación
                             if not documentos_unicos[clave]["info"] and info_objeto:
                                 documentos_unicos[clave]["info"] = info_objeto
 
