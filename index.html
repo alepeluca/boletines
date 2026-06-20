@@ -408,6 +408,7 @@
     progressBar.textContent = '';
     
     let totalCategorias = categoriasPorDescargar.length;
+    let archivosDescargadosContador = 0;
     
     for (let i = 0; i < totalCategorias; i++) {
       const catKey = categoriasPorDescargar[i];
@@ -426,6 +427,15 @@
           if (!res.ok) {
             consecutiveErrors++;
             partIdx++;
+            // --- NUEVO CÁLCULO DE PROGRESO FLUIDO ---
+            archivosDescargadosContador++;
+            // Suponemos un promedio estimado de 150 archivos totales por búsqueda activa para simular el avance de red
+            let porcentajeDinamic = Math.min(Math.round((archivosDescargadosContador / (totalCategorias * 70)) * 100), 99);
+            
+            progressBar.style.width = porcentajeDinamic + '%';
+            if (porcentajeDinamic > 0) {
+              progressBar.textContent = porcentajeDinamic + '%';
+            }
             continue;
           }
           
@@ -448,16 +458,7 @@
           partIdx++;
         }
       }
-      // Buscá la línea abajo de todo del bucle "progressBar.value = Math.round(...)" y cambiala por esto:
-      let porcentaje = Math.round(((i + 1) / totalCategorias) * 100);
-      progressBar.style.width = porcentaje + '%';
-      
-      if (porcentaje > 0 && porcentaje < 100) {
-        progressBar.textContent = porcentaje + '%';
-      } else {
-        progressBar.textContent = '';
-      }
-    }
+
     statusDiv.textContent = '¡Fragmentos seleccionados cargados con éxito!';
     // Buscá el final de la función donde dice "statusDiv.textContent = '...'" y agregá esto abajo:
     progressBar.style.width = '100%';
