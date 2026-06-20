@@ -88,7 +88,9 @@
     <button id="botonBuscarChunks" class="btn-secondary" style="padding: 0.6rem 2rem; font-size: 1.1rem;">🔍 Buscar</button>
   </div>
 
-  <progress id="progressBar" max="100" value="0"></progress>
+  <div id="progressContainer" style="width: 100%; max-width: 900px; background: #e2e8f0; border-radius: 20px; height: 24px; position: relative; overflow: hidden; margin: 1rem 0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); display: none;">
+    <div id="progressBar" style="width: 0%; height: 100%; background: #3b82f6; transition: width 0.2s ease; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.9rem;"></div>
+  </div>
 
   <div id="status"></div>
   <div id="contador"></div>
@@ -109,6 +111,8 @@
   const desdeInput = document.getElementById('desde');
   const hastaInput = document.getElementById('hasta');
   const ordenSelect = document.getElementById('orden');
+  const progressContainer = document.getElementById('progressContainer');
+  
 
   const descFiltroAnno = document.getElementById('descFiltroAnno');
   const descDesagregarMensual = document.getElementById('descDesagregarMensual');
@@ -398,7 +402,10 @@
     }
 
     statusDiv.textContent = 'Sincronizando fragmentos de texto profundo en RAM...';
-    progressBar.value = 0;
+    // Buscá el inicio de la función y poné esto:
+    progressContainer.style.display = 'block';
+    progressBar.style.width = '0%';
+    progressBar.textContent = '';
     
     let totalCategorias = categoriasPorDescargar.length;
     
@@ -441,9 +448,23 @@
           partIdx++;
         }
       }
-      progressBar.value = Math.round(((i + 1) / totalCategorias) * 100);
+      // Buscá la línea abajo de todo del bucle "progressBar.value = Math.round(...)" y cambiala por esto:
+      let porcentaje = Math.round(((i + 1) / totalCategorias) * 100);
+      progressBar.style.width = porcentaje + '%';
+      
+      if (porcentaje > 0 && porcentaje < 100) {
+        progressBar.textContent = porcentaje + '%';
+      } else {
+        progressBar.textContent = '';
+      }
     }
     statusDiv.textContent = '¡Fragmentos seleccionados cargados con éxito!';
+    // Buscá el final de la función donde dice "statusDiv.textContent = '...'" y agregá esto abajo:
+    progressBar.style.width = '100%';
+    progressBar.textContent = '';
+    setTimeout(() => {
+      progressContainer.style.display = 'none';
+    }, 1500); // Se oculta automáticamente a los de 1.5 segundos de terminar
   }
 
   async function realizarBusquedaChunks() {
