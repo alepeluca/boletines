@@ -46,6 +46,20 @@
     </div>
   </div>
 
+  <div id="seccionDescargas" style="width: 100%; max-width: 900px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin: 0.5rem 0 1rem 0; box-sizing: border-box;">
+    <h4 style="margin: 0 0 0.4rem 0; display:flex; align-items:center; gap:0.5rem;">📅 Índice de Archivos y Descargas Directas</h4>
+    
+    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.8rem;">
+      <label>Filtrar Año: <select id="descFiltroAnno"><option value="TODOS">Todos los años</option></select></label>
+      <label><input type="checkbox" id="descDesagregarMensual"> Desagregar meses</label>
+      <span id="descCargandoStatus" style="font-size:0.85rem; color:#666; font-style:italic;">Leyendo índice unificado…</span>
+    </div>
+    
+    <div id="descContenedorEnlaces" style="max-height: 200px; overflow-y: auto; padding: 0.5rem; border: 1px dashed #ccc; border-radius: 4px; background: #fafafa; display: flex; flex-direction: column; gap: 0.6rem;">
+      <span style="color:#888; font-size:0.85rem; font-style:italic; text-align:center;">Construyendo grilla de descargas…</span>
+    </div>
+  </div>
+
   <div id="searchContainer">
     <div id="categoryOptions">
       <label><input type="checkbox" id="cat-boletines" value="boletines" checked> Boletines Oficiales</label>
@@ -74,20 +88,6 @@
   </div>
 
   <progress id="progressBar" max="100" value="0"></progress>
-
-  <div id="seccionDescargas" style="width: 100%; max-width: 900px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin: 0.5rem 0 1rem 0; box-sizing: border-box;">
-    <h4 style="margin: 0 0 0.4rem 0; display:flex; align-items:center; gap:0.5rem;">📅 Índice de Archivos y Descargas Directas</h4>
-    
-    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.8rem;">
-      <label>Filtrar Año: <select id="descFiltroAnno"><option value="TODOS">Todos los años</option></select></label>
-      <label><input type="checkbox" id="descDesagregarMensual"> Desagregar meses</label>
-      <span id="descCargandoStatus" style="font-size:0.85rem; color:#666; font-style:italic;">Leyendo índice unificado…</span>
-    </div>
-    
-    <div id="descContenedorEnlaces" style="max-height: 200px; overflow-y: auto; padding: 0.5rem; border: 1px dashed #ccc; border-radius: 4px; background: #fafafa; display: flex; flex-direction: column; gap: 0.6rem;">
-      <span style="color:#888; font-size:0.85rem; font-style:italic; text-align:center;">Construyendo grilla de descargas…</span>
-    </div>
-  </div>
 
   <div id="status"></div>
   <div id="contador"></div>
