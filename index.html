@@ -296,9 +296,18 @@
       subGrupo.sort((a,b) => b.datosFecha.sortable.localeCompare(a.datosFecha.sortable));
       const ultimo = subGrupo[0];
       const idDoc = extraerCodigoLimpio(ultimo);
-      const fechaDisplay = ultimo.datosFecha.display !== 'S/F' ? ` (${ultimo.datosFecha.display})` : '';
+      const fechaDisplay = ultimo.datosFecha.display !== 'S/F' ? `${ultimo.datosFecha.display}` : 'Sin Fecha';
       
-      container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>${conf.label}:</strong> N.º ${idDoc}${fechaDisplay}</span>`;
+      // Nueva lógica: si es de HCD, cambia el formato del texto y elimina el N.º
+      if (key === 'hcd_orden') {
+        container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Orden del día:</strong> Sesión ${fechaDisplay}</span>`;
+      } else if (key === 'hcd_taqui') {
+        container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Taquigráfica:</strong> Sesión ${fechaDisplay}</span>`;
+      } else {
+        // Boletines y Licitaciones se mantienen con su formato tradicional de N.º
+        const fechaParentesis = ultimo.datosFecha.display !== 'S/F' ? ` (${ultimo.datosFecha.display})` : '';
+        container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>${conf.label}:</strong> N.º ${idDoc}${fechaParentesis}</span>`;
+      }
     });
   }
 
