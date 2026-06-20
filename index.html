@@ -63,9 +63,9 @@
   <div id="searchContainer">
     <div id="categoryOptions">
       <label><input type="checkbox" id="cat-boletines" value="boletines" checked> Boletines Oficiales</label>
-      <label><input type="checkbox" id="cat-licitaciones" value="licitaciones" checked> Licitaciones Públicas</label>
-      <label><input type="checkbox" id="cat-hcd-orden" value="hcd_orden" checked> HCD: Órdenes del Día</label>
-      <label><input type="checkbox" id="cat-hcd-taqui" value="hcd_taqui" checked> HCD: Taquigráficas</label>
+      <label><input type="checkbox" id="cat-licitaciones" value="licitaciones"> Licitaciones Públicas</label>
+      <label><input type="checkbox" id="cat-hcd-orden" value="hcd_orden"> HCD: Órdenes del Día</label>
+      <label><input type="checkbox" id="cat-hcd-taqui" value="hcd_taqui"> HCD: Taquigráficas</label>
     </div>
 
     <div id="searchOptions">
@@ -374,22 +374,42 @@
 
   // SISTEMA DE CHUNKS: Descarga y escaneo profundo en memoria RAM
   async function descargarTodoElCacheChunks() {
-    chunkCache = [];
-    statusDiv.textContent = 'Inicializando descarga silenciosa de Chunks a memoria RAM...';
+    // Si no existía la caché, la inicializamos vacía
+    if (!chunkCache) {
+      chunkCache = [];
+    }
+    
+    // Identificamos qué categorías eligió el usuario en pantalla
+    const categoriasActivas = [];
+    if(document.getElementById('cat-boletines').checked) categoriasActivas.push('boletines');
+    if(document.getElementById('cat-licitaciones').checked) categoriasActivas.push('licitaciones');
+    if(document.getElementById('cat-hcd-orden').checked) categoriasActivas.push('hcd_orden');
+    if(document.getElementById('cat-hcd-taqui').checked) categoriasActivas.push('hcd_taqui');
+
+    // Filtramos para descargar SOLO las que están tildadas Y que todavía no bajamos antes
+    const categoriasPorDescargar = categoriasActivas.filter(cat => {
+      // Verificamos si ya tenemos aunque sea un elemento de esa categoría en memoria
+      return !chunkCache.some(obj => obj._categoriaInterna === cat);
+    });
+
+    // Si ya tenemos todo lo solicitado descargado en memoria, salimos al toque
+    if (categoriasPorDescargar.length === 0) {
+      return;
+    }
+
+    statusDiv.textContent = 'Sincronizando fragmentos de texto profundo en RAM...';
     progressBar.value = 0;
     
-    const keys = Object.keys(CONFIG_CATEGORIAS);
-    let totalCategorias = keys.length;
+    let totalCategorias = categoriasPorDescargar.length;
     
     for (let i = 0; i < totalCategorias; i++) {
-      const catKey = keys[i];
+      const catKey = categoriasPorDescargar[i];
       const conf = CONFIG_CATEGORIAS[catKey];
       let partIdx = conf.startDigit;
       let consecutiveErrors = 0;
       
-      statusDiv.textContent = `Descargando fragmentos de texto profundo: ${conf.label}...`;
+      statusDiv.textContent = `Descargando interior de: ${conf.label}...`;
       
-      // Escaneo incremental tolerante hasta agotar los archivos JSONL en el servidor remoto
       while (consecutiveErrors < 2 && partIdx < 150) {
         const partStr = String(partIdx).padStart(4, '0');
         const urlChunk = `json_chunks/${conf.chunkFolder}/${conf.prefix}${partStr}.jsonl`;
@@ -410,7 +430,7 @@
             if (!line.trim()) return;
             try {
               let obj = JSON.parse(line);
-              obj._categoriaInterna = catKey; // Sellar categoría de origen
+              obj._categoriaInterna = catKey;
               chunkCache.push(obj);
             } catch(e){}
           });
@@ -423,7 +443,7 @@
       }
       progressBar.value = Math.round(((i + 1) / totalCategorias) * 100);
     }
-    statusDiv.textContent = '¡Caché de Chunks sincronizada perfectamente!';
+    statusDiv.textContent = '¡Fragmentos seleccionados cargados con éxito!';
   }
 
   async function realizarBusquedaChunks() {
