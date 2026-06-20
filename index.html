@@ -417,7 +417,7 @@
       
       statusDiv.textContent = `Descargando interior de: ${conf.label}...`;
       
-      while (consecutiveErrors < 2 && partIdx < 150) {
+      while (consecutiveErrors < 2 && partIdx < 999) {
         const partStr = String(partIdx).padStart(4, '0');
         const urlChunk = `json_chunks/${conf.chunkFolder}/${conf.prefix}${partStr}.jsonl`;
         
