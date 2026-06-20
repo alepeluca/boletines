@@ -83,8 +83,7 @@
       <option value="desc">Más nuevos primero</option>
       <option value="asc">Más antiguos primero</option>
     </select>
-    <button id="botonBuscar" class="btn-primary">Buscar en Índice CSV</button>
-    <button id="botonBuscarChunks" class="btn-secondary">🔍 Búsqueda Textual Profunda (Chunks)</button>
+    <button id="botonBuscarChunks" class="btn-secondary">BUSCAR</button>
   </div>
 
   <progress id="progressBar" max="100" value="0"></progress>
@@ -672,11 +671,10 @@
   document.getElementById('cat-hcd-taqui').addEventListener('change', renderizarEnlacesIndice);
 
   // Escuchadores de eventos para los dos botones independientes
-  botonBuscar.addEventListener('click', realizarBusqueda);
   botonBuscarChunks.addEventListener('click', realizarBusquedaChunks);
   
   busquedaInput.addEventListener('keydown', e => { 
-    if(e.key === 'Enter') realizarBusqueda(); // Por defecto Enter dispara el sistema CSV tradicional
+    if(e.key === 'Enter') realizarBusquedaChunks(); // Ahora el Enter dispara los chunks
   });
 
   cargarBaseDeDatosCSV();
