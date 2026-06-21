@@ -29,7 +29,6 @@
     #pdfPreview { width: 100%; max-width: 900px; min-height: 600px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
     #pdfPreview iframe { width: 100%; height: 600px; border: none; }
     #status, #contador { width: 100%; text-align: center; margin: .5rem 0; }
-    progress { width: 100%; max-width: 900px; }
     #version { margin-top: 1rem; color: #666; font-size: .9rem; font-weight: bold; }
     
     .btn-primary { background-color: #0056b3; color: white; border: none; padding: 0.5rem 1rem; font-size: 1rem; border-radius: 4px; cursor: pointer; font-weight: bold; }
@@ -73,10 +72,10 @@
       <label><input type="radio" name="searchType" value="endsWith"> Termina en</label>
       <label><input type="radio" name="searchType" value="or"> Alguna palabra</label>
     </div>
-    <input id="busqueda" placeholder="Escribí una palabra y presioná Enter para búsqueda en índice CSV…" style="width:100%;padding:.5rem;font-size:1rem" />
+    <input id="busqueda" placeholder="Escribí una palabra y presioná Enter para búsqueda profunda..." style="width:100%;padding:.5rem;font-size:1rem" />
   </div>
 
-  <div id="dateContainer" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+  <div id="dateContainer" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; justify-content: center; margin-bottom: 1.5rem;">
     <label>Desde: <input type="month" id="desde" /></label>
     <label>Hasta: <input type="month" id="hasta" /></label>
     <select id="orden">
@@ -84,6 +83,7 @@
       <option value="asc">Más antiguos primero</option>
     </select>
   </div>
+  
   <div style="width: 100%; text-align: center; margin-bottom: 1.5rem;">
     <button id="botonBuscarChunks" class="btn-secondary" style="padding: 0.6rem 2rem; font-size: 1.1rem;">🔍 Buscar</button>
   </div>
@@ -101,19 +101,19 @@
 <script>
   const ultimaDiv = document.getElementById('ultimaActualizacion');
   const busquedaInput = document.getElementById('busqueda');
-  const botonBuscar = document.getElementById('botonBuscar');
   const botonBuscarChunks = document.getElementById('botonBuscarChunks');
   const resultadosDiv = document.getElementById('resultados');
   const pdfPreview = document.getElementById('pdfPreview');
   const statusDiv = document.getElementById('status');
   const contadorDiv = document.getElementById('contador');
+  
+  const progressContainer = document.getElementById('progressContainer');
   const progressBar = document.getElementById('progressBar');
+  
   const desdeInput = document.getElementById('desde');
   const hastaInput = document.getElementById('hasta');
   const ordenSelect = document.getElementById('orden');
-  const progressContainer = document.getElementById('progressContainer');
   
-
   const descFiltroAnno = document.getElementById('descFiltroAnno');
   const descDesagregarMensual = document.getElementById('descDesagregarMensual');
   const descCargandoStatus = document.getElementById('descCargandoStatus');
@@ -206,7 +206,6 @@
     return { sortable: "19000101", display: "S/F", year: "N/D", month: "01" };
   }
 
-  // Normalizador Universal de Fechas para Chunks Remotos
   function normalizarFechaChunk(obj) {
     if (obj.fecha) return obj.fecha.replace(/[^\d]/g, '').slice(0, 8);
     if (obj.fecha_acta) return obj.fecha_acta.replace(/[^\d]/g, '').slice(0, 8);
@@ -260,17 +259,14 @@
 
   async function cargarBaseDeDatosCSV() {
     try {
-      progressBar.value = 30;
       const respuesta = await fetch('indice_documentos.csv');
       if (!respuesta.ok) throw new Error("No se encontró el índice CSV.");
       
       const textoCSV = await respuesta.text();
-      progressBar.value = 70;
       
       baseDocumentosIndexados = parsearCSV(textoCSV);
       baseDocumentosIndexados.forEach(obj => { obj.datosFecha = obtenerDatosFecha(obj); });
       
-      progressBar.value = 100;
       descCargandoStatus.textContent = ""; 
       
       autocompletarFechas(); 
@@ -302,13 +298,11 @@
       const idDoc = extraerCodigoLimpio(ultimo);
       const fechaDisplay = ultimo.datosFecha.display !== 'S/F' ? `${ultimo.datosFecha.display}` : 'Sin Fecha';
       
-      // Nueva lógica: si es de HCD, cambia el formato del texto y elimina el N.º
       if (key === 'hcd_orden') {
         container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Orden del día:</strong> Sesión ${fechaDisplay}</span>`;
       } else if (key === 'hcd_taqui') {
         container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Taquigráfica:</strong> Sesión ${fechaDisplay}</span>`;
       } else {
-        // Boletines y Licitaciones se mantienen con su formato tradicional de N.º
         const fechaParentesis = ultimo.datosFecha.display !== 'S/F' ? ` (${ultimo.datosFecha.display})` : '';
         container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>${conf.label}:</strong> N.º ${idDoc}${fechaParentesis}</span>`;
       }
@@ -323,86 +317,26 @@
     pdfPreview.appendChild(iframe);
   }
 
-  // SISTEMA CSV: Búsqueda rápida tradicional
-  function realizarBusqueda() {
-    const q = busquedaInput.value.trim();
-    if (!q) return;
-
-    const categoriasActivas = [];
-    if(document.getElementById('cat-boletines').checked) categoriasActivas.push('boletines');
-    if(document.getElementById('cat-licitaciones').checked) categoriasActivas.push('licitaciones');
-    if(document.getElementById('cat-hcd-orden').checked) categoriasActivas.push('hcd_orden');
-    if(document.getElementById('cat-hcd-taqui').checked) categoriasActivas.push('hcd_taqui');
-
-    if (categoriasActivas.length === 0) {
-      resultadosDiv.innerHTML = '<p>Seleccioná al menos una categoría.</p>';
-      return;
-    }
-
-    statusDiv.textContent = 'Buscando en base local (CSV)…';
-    resultadosDiv.innerHTML = '';
-    pdfPreview.innerHTML = '';
-
-    let regex;
-    const mode = document.querySelector('input[name="searchType"]:checked').value;
-    if (mode === 'endsWith') regex = new RegExp(q + '$', 'i');
-    else if (mode === 'or') regex = new RegExp(q.split('|').join('|'), 'i');
-    else regex = new RegExp(q, 'i');
-
-    let matches = baseDocumentosIndexados.filter(obj => {
-      if (!categoriasActivas.includes(obj.categoria)) return false;
-      const textoTarget = (obj.extra_info || '') + ' ' + (obj.archivo || '');
-      return regex.test(textoTarget);
-    });
-
-    const desde = desdeInput.value ? desdeInput.value.replace(/-/g, '') + '00' : null;
-    const hasta = hastaInput.value ? hastaInput.value.replace(/-/g, '') + '32' : null;
-
-    if (desde) matches = matches.filter(m => m.datosFecha.sortable >= desde);
-    if (hasta) matches = matches.filter(m => m.datosFecha.sortable <= hasta);
-
-    matches.sort((a, b) => {
-      const da = a.datosFecha.sortable, db = b.datosFecha.sortable;
-      return ordenSelect.value === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
-    });
-
-    statusDiv.textContent = '';
-    if (!matches.length) {
-      resultadosDiv.innerHTML = '<p>No se encontraron resultados en el Índice CSV.</p>';
-      contadorDiv.textContent = '0 resultados';
-      return;
-    }
-
-    renderizarResultadosFinales(matches, regex, false);
-  }
-
-  // SISTEMA DE CHUNKS: Descarga y escaneo profundo en memoria RAM
   async function descargarTodoElCacheChunks() {
-    // Si no existía la caché, la inicializamos vacía
     if (!chunkCache) {
       chunkCache = [];
     }
     
-    // Identificamos qué categorías eligió el usuario en pantalla
     const categoriasActivas = [];
     if(document.getElementById('cat-boletines').checked) categoriasActivas.push('boletines');
     if(document.getElementById('cat-licitaciones').checked) categoriasActivas.push('licitaciones');
     if(document.getElementById('cat-hcd-orden').checked) categoriasActivas.push('hcd_orden');
     if(document.getElementById('cat-hcd-taqui').checked) categoriasActivas.push('hcd_taqui');
 
-    // Filtramos para descargar SOLO las que están tildadas Y que todavía no bajamos antes
     const categoriasPorDescargar = categoriasActivas.filter(cat => {
-      // Verificamos si ya tenemos aunque sea un elemento de esa categoría en memoria
       return !chunkCache.some(obj => obj._categoriaInterna === cat);
     });
 
-    // Si ya tenemos todo lo solicitado descargado en memoria, salimos al toque
     if (categoriasPorDescargar.length === 0) {
       return;
     }
 
     statusDiv.textContent = 'Sincronizando fragmentos de texto profundo en RAM...';
-    // Buscá el inicio de la función y poné esto:
     progressContainer.style.display = 'block';
     progressBar.style.width = '0%';
     progressBar.textContent = '';
@@ -427,15 +361,6 @@
           if (!res.ok) {
             consecutiveErrors++;
             partIdx++;
-            // --- NUEVO CÁLCULO DE PROGRESO FLUIDO ---
-            archivosDescargadosContador++;
-            // Suponemos un promedio estimado de 150 archivos totales por búsqueda activa para simular el avance de red
-            let porcentajeDinamic = Math.min(Math.round((archivosDescargadosContador / (totalCategorias * 70)) * 100), 99);
-            
-            progressBar.style.width = porcentajeDinamic + '%';
-            if (porcentajeDinamic > 0) {
-              progressBar.textContent = porcentajeDinamic + '%';
-            }
             continue;
           }
           
@@ -453,19 +378,29 @@
           });
           
           partIdx++;
+          
+          // Progreso fluido y dinámico
+          archivosDescargadosContador++;
+          let porcentajeDinamic = Math.min(Math.round((archivosDescargadosContador / (totalCategorias * 70)) * 100), 99);
+          
+          progressBar.style.width = porcentajeDinamic + '%';
+          if (porcentajeDinamic > 0) {
+            progressBar.textContent = porcentajeDinamic + '%';
+          }
+          
         } catch (err) {
           consecutiveErrors++;
           partIdx++;
         }
       }
-
+    }
+    
     statusDiv.textContent = '¡Fragmentos seleccionados cargados con éxito!';
-    // Buscá el final de la función donde dice "statusDiv.textContent = '...'" y agregá esto abajo:
     progressBar.style.width = '100%';
     progressBar.textContent = '';
     setTimeout(() => {
       progressContainer.style.display = 'none';
-    }, 1500); // Se oculta automáticamente a los de 1.5 segundos de terminar
+    }, 1500);
   }
 
   async function realizarBusquedaChunks() {
@@ -486,8 +421,8 @@
       return;
     }
 
-    // Descarga única condicional
-    if (!chunkCache) {
+    // Descarga condicional e inteligente
+    if (!chunkCache || categoriasActivas.some(cat => !chunkCache.some(obj => obj._categoriaInterna === cat))) {
       await descargarTodoElCacheChunks();
     }
 
@@ -501,7 +436,6 @@
     else if (mode === 'or') regex = new RegExp(q.split('|').join('|'), 'i');
     else regex = new RegExp(q, 'i');
 
-    // Rangos de fecha normalizados para comparación string de 8 dígitos
     const desdeString = desdeInput.value ? desdeInput.value.replace(/-/g, '') + '00' : '00000000';
     const hastaString = hastaInput.value ? hastaInput.value.replace(/-/g, '') + '32' : '99999999';
 
@@ -510,26 +444,17 @@
     chunkCache.forEach(obj => {
       if (!categoriasActivas.includes(obj._categoriaInterna)) return;
       
-      // Aplicación estricta de prioridad de fechas
       const fecha8 = normalizarFechaChunk(obj);
       if (fecha8 < desdeString || fecha8 > hastaString) return;
 
-      // Lógica de búsqueda selectiva por categorías
       let cumple = false;
       if (obj._categoriaInterna === 'licitaciones') {
-        // Licitaciones busca en fragmento, codigo y archivo
-        if (regex.test(obj.fragmento || '') || regex.test(obj.codigo || '') || regex.test(obj.archivo || '')) {
-          cumple = true;
-        }
+        if (regex.test(obj.fragmento || '') || regex.test(obj.codigo || '') || regex.test(obj.archivo || '')) cumple = true;
       } else {
-        // Boletines, Órdenes y Taquigráficas buscan exclusivamente en fragmento
-        if (regex.test(obj.fragmento || '')) {
-          cumple = true;
-        }
+        if (regex.test(obj.fragmento || '')) cumple = true;
       }
 
       if (cumple) {
-        // Formatear propiedad común para compatibilidad con la grilla visual
         matches.push({
           categoria: obj._categoriaInterna,
           archivo: obj.archivo || '',
@@ -545,7 +470,6 @@
       }
     });
 
-    // Ordenamiento Ascendente / Descendente
     matches.sort((a, b) => {
       const da = a.datosFecha.sortable, db = b.datosFecha.sortable;
       return ordenSelect.value === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
@@ -553,7 +477,7 @@
 
     statusDiv.textContent = '';
     if (!matches.length) {
-      resultadosDiv.innerHTML = '<p>No se encontraron resultados en la búsqueda textual por Chunks.</p>';
+      resultadosDiv.innerHTML = '<p>No se encontraron resultados en la búsqueda textual.</p>';
       contadorDiv.textContent = '0 resultados';
       return;
     }
@@ -562,7 +486,7 @@
   }
 
   function renderizarResultadosFinales(matches, regex, esChunk) {
-    contadorDiv.textContent = `${matches.length} resultados (${esChunk ? 'Búsqueda Profunda' : 'Índice CSV'})`;
+    contadorDiv.textContent = `${matches.length} resultados encontrados`;
     
     const primero = matches[0];
     cargarPDF(`${primero.url}#page=${primero.pagina || 1}`);
@@ -723,11 +647,11 @@
   document.getElementById('cat-hcd-orden').addEventListener('change', renderizarEnlacesIndice);
   document.getElementById('cat-hcd-taqui').addEventListener('change', renderizarEnlacesIndice);
 
-  // Escuchadores de eventos para los dos botones independientes
+  // Escuchadores de eventos listos
   botonBuscarChunks.addEventListener('click', realizarBusquedaChunks);
   
   busquedaInput.addEventListener('keydown', e => { 
-    if(e.key === 'Enter') realizarBusquedaChunks(); // Ahora el Enter dispara los chunks
+    if(e.key === 'Enter') realizarBusquedaChunks();
   });
 
   cargarBaseDeDatosCSV();
