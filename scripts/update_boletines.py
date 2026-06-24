@@ -71,9 +71,9 @@ def find_latest_chunk():
     archivos = []
 
     # Ahora busca dentro de la nueva subcarpeta
-    for f in JSON_CHUNKS_DIR.glob("boletines_part_*.jsonl"):
+    for f in JSON_CHUNKS_DIR.glob("bolet_part_*.jsonl"):
         # Adaptado para capturar tanto formatos viejos (_part_1) como nuevos (_part_0001)
-        match = re.search(r"boletines_part_(\d+)\.jsonl", f.name)
+        match = re.search(r"bolet_part_(\d+)\.jsonl", f.name)
         if match:
             archivos.append((int(match.group(1)), f))
 
@@ -200,7 +200,7 @@ def pdf_to_fragments(pdf_path: Path, fecha: str, url_oficial: str):
 
 def save_new_chunk(chunk_index: int, fragments: list):
     # MEJORA: f"{chunk_index:04d}" asegura que el archivo se guarde siempre con 4 dígitos (ej: 0024)
-    salida = JSON_CHUNKS_DIR / f"boletines_part_{chunk_index:04d}.jsonl"
+    salida = JSON_CHUNKS_DIR / f"bolet_part_{chunk_index:04d}.jsonl"
 
     print(f"[INFO] Guardando {salida.name}")
     with open(salida, "w", encoding="utf-8") as f:
