@@ -96,7 +96,7 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V1.3.1 Asíncrona Fix</div>
+  <div id="version">V1.3.2 Asíncrona Fix Total</div>
 
 <script>
   const ultimaDiv = document.getElementById('ultimaActualizacion');
@@ -122,7 +122,6 @@
   let baseDocumentosIndexados = []; 
   let documentosUnicosParaDescarga = [];
   
-  // Caché global en memoria para los Chunks de Texto Profundo
   let chunkCache = null;
 
   const CONFIG_CATEGORIAS = {
@@ -260,7 +259,7 @@
   async function cargarBaseDeDatosCSV() {
     try {
       const respuesta = await fetch('indice_documentos.csv');
-      if (!res.ok && !respuesta.ok) throw new Error("No se encontró el índice CSV.");
+      if (!respuesta.ok) throw new Error("No se encontró el índice CSV.");
       
       const textoCSV = await respuesta.text();
       
@@ -293,16 +292,13 @@
             return;
         }
 
-        // --- CORRECCIÓN DE ORDENAMIENTO CRONOLÓGICO SEGURO ---
-        // Ordenamos estrictamente por la fecha mapeada (sortable 'YYYYMMDD') de mayor a menor
+        // Ordenamos estrictamente de forma cronológica descendente usando sortable
         subGrupo.sort((a, b) => b.datosFecha.sortable.localeCompare(a.datosFecha.sortable));
 
-        // Tomamos el documento con la fecha más reciente
         const ultimo = subGrupo[0];
         const idDoc = extraerCodigoLimpio(ultimo);
         const fechaDisplay = ultimo.datosFecha.display !== 'S/F' ? `${ultimo.datosFecha.display}` : 'Sin Fecha';
         
-        // Renderizamos segun la categoria
         if (key === 'hcd_orden') {
             container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Orden del día:</strong> Sesión ${fechaDisplay}</span>`;
         } else if (key === 'hcd_taqui') {
@@ -333,11 +329,11 @@
     if(document.getElementById('cat-hcd-orden').checked) categoriasActivas.push('hcd_orden');
     if(document.getElementById('cat-hcd-taqui').checked) categoriasActivas.push('hcd_taqui');
 
-    const categoriesPorDescargar = categoriasActivas.filter(cat => {
+    const categoriasPorDescargar = categoriasActivas.filter(cat => {
       return !chunkCache.some(obj => obj._categoriaInterna === cat);
     });
 
-    if (categoriesPorDescargar.length === 0) {
+    if (categoriasPorDescargar.length === 0) {
       return;
     }
 
@@ -346,11 +342,11 @@
     progressBar.style.width = '0%';
     progressBar.textContent = '0%';
     
-    let totalCategorias = categoriesPorDescargar.length;
+    let totalCategorias = categoriasPorDescargar.length;
     let archivosDescargadosContador = 0;
     
     for (let i = 0; i < totalCategorias; i++) {
-      const catKey = categoriesPorDescargar[i];
+      const catKey = categoriasPorDescargar[i];
       const conf = CONFIG_CATEGORIAS[catKey];
       let partIdx = conf.startDigit;
       let consecutiveErrors = 0;
