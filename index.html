@@ -285,27 +285,36 @@
     const container = ultimaDiv.firstChild;
 
     Object.keys(CONFIG_CATEGORIAS).forEach(key => {
-      const conf = CONFIG_CATEGORIAS[key];
-      const subGrupo = baseDocumentosIndexados.filter(d => d.categoria === key);
-      
-      if (subGrupo.length === 0) {
-        container.innerHTML += `<span style="border-left: 4px solid #ccc; padding-left:5px; color:#666;"><strong>${conf.label}:</strong> Sin datos</span>`;
-        return;
-      }
+        const conf = CONFIG_CATEGORIAS[key];
+        const subGrupo = baseDocumentosIndexados.filter(d => d.categoria === key);
+        
+        if (subGrupo.length === 0) {
+            container.innerHTML += `<span style="border-left: 4px solid #ccc; padding-left:5px; color:#666;"><strong>${conf.label}:</strong> Sin datos</span>`;
+            return;
+        }
 
-      subGrupo.sort((a,b) => b.datosFecha.sortable.localeCompare(a.datosFecha.sortable));
-      const ultimo = subGrupo[0];
-      const idDoc = extraerCodigoLimpio(ultimo);
-      const fechaDisplay = ultimo.datosFecha.display !== 'S/F' ? `${ultimo.datosFecha.display}` : 'Sin Fecha';
-      
-      if (key === 'hcd_orden') {
-        container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Orden del día:</strong> Sesión ${fechaDisplay}</span>`;
-      } else if (key === 'hcd_taqui') {
-        container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Taquigráfica:</strong> Sesión ${fechaDisplay}</span>`;
-      } else {
-        const fechaParentesis = ultimo.datosFecha.display !== 'S/F' ? ` (${ultimo.datosFecha.display})` : '';
-        container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>${conf.label}:</strong> N.º ${idDoc}${fechaParentesis}</span>`;
-      }
+        // --- CORRECCIÓN LÓGICA AQUÍ ---
+        // 1. Ordenamos por número (extraído del nombre del archivo) de mayor a menor
+        subGrupo.sort((a, b) => {
+            const numA = parseInt(extraerCodigoLimpio(a)) || 0;
+            const numB = parseInt(extraerCodigoLimpio(b)) || 0;
+            return numB - numA;
+        });
+
+        // 2. Tomamos el boletín/documento con el número más alto
+        const ultimo = subGrupo[0];
+        const idDoc = extraerCodigoLimpio(ultimo);
+        const fechaDisplay = ultimo.datosFecha.display !== 'S/F' ? `${ultimo.datosFecha.display}` : 'Sin Fecha';
+        
+        // 3. Renderizamos
+        if (key === 'hcd_orden') {
+            container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Orden del día:</strong> Sesión ${fechaDisplay}</span>`;
+        } else if (key === 'hcd_taqui') {
+            container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Taquigráfica:</strong> Sesión ${fechaDisplay}</span>`;
+        } else {
+            const fechaParentesis = ultimo.datosFecha.display !== 'S/F' ? ` (${ultimo.datosFecha.display})` : '';
+            container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>${conf.label}:</strong> N.º ${idDoc}${fechaParentesis}</span>`;
+        }
     });
   }
 
