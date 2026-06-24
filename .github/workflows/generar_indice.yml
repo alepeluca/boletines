@@ -5,18 +5,21 @@ on:
     branches:
       - main
     paths:
-      - 'json_chunks/**/*.jsonl'  # Se dispara en cadena automáticamente cuando entra un chunk
-  workflow_dispatch:              # <-- ¡ESTO PERMITE LA PRIMERA CORRIDA MANUAL DESDE LA WEB!
+      - 'json_chunks/**/*.jsonl'
+  workflow_dispatch:
 
 jobs:
   build-csv:
     runs-on: ubuntu-latest
+    # EVITAR BUCLES: Si el commit lo hizo el bot, no corras.
+    if: "!contains(github.event.head_commit.message, '[Skip GitHub Actions]')"
 
     steps:
       - name: Check out del repositorio
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }} # Asegúrate de tener permisos
 
       - name: Configurar Python
         uses: actions/setup-python@v5
@@ -32,12 +35,15 @@ jobs:
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
           
-          git add indice_documentos.csv
-          
-          if git diff --staged --quiet; then
-            echo "[INFO] El índice CSV ya estaba actualizado. No se requieren cambios."
+          # Verificar si hay cambios reales
+          if git diff --quiet indice_documentos.csv; then
+            echo "[INFO] No hay cambios en el índice. Nada que hacer."
           else
+            git add indice_documentos.csv
+            # El mensaje con [Skip GitHub Actions] es clave
             git commit -m "Autogeneración de índice_documentos.csv [Skip GitHub Actions]"
+            
+            # Rebase para asegurar que no hay conflicto si alguien más subió algo
             git pull --rebase origin main
             git push origin main
           fi
