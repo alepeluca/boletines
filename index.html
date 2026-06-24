@@ -96,7 +96,7 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V1.3.0 Asíncrona</div>
+  <div id="version">V1.3.1 Asíncrona Fix</div>
 
 <script>
   const ultimaDiv = document.getElementById('ultimaActualizacion');
@@ -184,7 +184,7 @@
   function obtenerDatosFecha(obj) {
     let rawFecha = obj.fecha ? obj.fecha.replace(/[^\d-]/g, '') : '';
     
-    let matchStandard = rawFecha.match(/^(19[89]\d|20[012]\d)[-]?([01]\d)[-]?([0-3]\d)$/);
+    let matchStandard = rawFecha.match(/^(19[89]\d|20[0123]\d)[-]?([01]\d)[-]?([0-3]\d)$/);
     if (matchStandard) {
       return {
         sortable: matchStandard[1] + matchStandard[2] + matchStandard[3],
@@ -194,7 +194,7 @@
     }
 
     let textoTarget = (obj.archivo || '') + ' ' + (obj.extra_info || '');
-    let matchYear = textoTarget.match(/\b(19[89]\d|20[012]\d)\b/);
+    let matchYear = textoTarget.match(/\b(19[89]\d|20[0123]\d)\b/);
     if (matchYear) {
       return {
         sortable: matchYear[1] + "0101",
@@ -260,7 +260,7 @@
   async function cargarBaseDeDatosCSV() {
     try {
       const respuesta = await fetch('indice_documentos.csv');
-      if (!respuesta.ok) throw new Error("No se encontró el índice CSV.");
+      if (!res.ok && !respuesta.ok) throw new Error("No se encontró el índice CSV.");
       
       const textoCSV = await respuesta.text();
       
@@ -293,20 +293,16 @@
             return;
         }
 
-        // --- CORRECCIÓN LÓGICA AQUÍ ---
-        // 1. Ordenamos por número (extraído del nombre del archivo) de mayor a menor
-        subGrupo.sort((a, b) => {
-            const numA = parseInt(extraerCodigoLimpio(a)) || 0;
-            const numB = parseInt(extraerCodigoLimpio(b)) || 0;
-            return numB - numA;
-        });
+        // --- CORRECCIÓN DE ORDENAMIENTO CRONOLÓGICO SEGURO ---
+        // Ordenamos estrictamente por la fecha mapeada (sortable 'YYYYMMDD') de mayor a menor
+        subGrupo.sort((a, b) => b.datosFecha.sortable.localeCompare(a.datosFecha.sortable));
 
-        // 2. Tomamos el boletín/documento con el número más alto
+        // Tomamos el documento con la fecha más reciente
         const ultimo = subGrupo[0];
         const idDoc = extraerCodigoLimpio(ultimo);
         const fechaDisplay = ultimo.datosFecha.display !== 'S/F' ? `${ultimo.datosFecha.display}` : 'Sin Fecha';
         
-        // 3. Renderizamos
+        // Renderizamos segun la categoria
         if (key === 'hcd_orden') {
             container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Orden del día:</strong> Sesión ${fechaDisplay}</span>`;
         } else if (key === 'hcd_taqui') {
@@ -337,11 +333,11 @@
     if(document.getElementById('cat-hcd-orden').checked) categoriasActivas.push('hcd_orden');
     if(document.getElementById('cat-hcd-taqui').checked) categoriasActivas.push('hcd_taqui');
 
-    const categoriasPorDescargar = categoriasActivas.filter(cat => {
+    const categoriesPorDescargar = categoriasActivas.filter(cat => {
       return !chunkCache.some(obj => obj._categoriaInterna === cat);
     });
 
-    if (categoriasPorDescargar.length === 0) {
+    if (categoriesPorDescargar.length === 0) {
       return;
     }
 
@@ -350,11 +346,11 @@
     progressBar.style.width = '0%';
     progressBar.textContent = '0%';
     
-    let totalCategorias = categoriasPorDescargar.length;
+    let totalCategorias = categoriesPorDescargar.length;
     let archivosDescargadosContador = 0;
     
     for (let i = 0; i < totalCategorias; i++) {
-      const catKey = categoriasPorDescargar[i];
+      const catKey = categoriesPorDescargar[i];
       const conf = CONFIG_CATEGORIAS[catKey];
       let partIdx = conf.startDigit;
       let consecutiveErrors = 0;
@@ -386,7 +382,6 @@
           
           partIdx++;
           
-          // Fase 1 de barra (Avanza hasta un máximo de 50%)
           archivosDescargadosContador++;
           let porcentajeDinamic = Math.min(Math.round((archivosDescargadosContador / (totalCategorias * 70)) * 50), 50);
           
@@ -402,7 +397,6 @@
       }
     }
     
-    // Al terminar, la fijamos en 50% exactamente y NO la ocultamos.
     statusDiv.textContent = '¡Descarga completada! Preparando fase de búsqueda...';
     progressBar.style.width = '50%';
     progressBar.textContent = '50%';
@@ -426,11 +420,9 @@
       return;
     }
 
-    // Ejecuta la Fase 1 si falta algún archivo
     if (!chunkCache || categoriasActivas.some(cat => !chunkCache.some(obj => obj._categoriaInterna === cat))) {
       await descargarTodoElCacheChunks();
     } else {
-      // Si ya estaba todo bajado, aseguramos que la barra sea visible para la Fase 2
       progressContainer.style.display = 'block';
     }
 
@@ -449,10 +441,9 @@
 
     let matches = [];
     
-    // VARIABLES PARA MICROTAREAS (Loteo Asíncrono)
     const totalChunksAProcesar = chunkCache.length;
     let indexActual = 0;
-    const TAMANO_LOTE = 2500; // Analiza de a 2500 renglones por tick para no trabar el front
+    const TAMANO_LOTE = 2500;
 
     function procesarLoteAsincrono() {
       const limiteLote = Math.min(indexActual + TAMANO_LOTE, totalChunksAProcesar);
@@ -489,7 +480,6 @@
 
       indexActual = limiteLote;
       
-      // Fase 2 de la Barra (Avanza del 50% al 100%)
       let avanceBusqueda = totalChunksAProcesar > 0 ? (indexActual / totalChunksAProcesar) * 50 : 50;
       let porcentajeFinal = Math.round(50 + avanceBusqueda);
       
@@ -497,10 +487,8 @@
       progressBar.textContent = porcentajeFinal + '%';
 
       if (indexActual < totalChunksAProcesar) {
-        // Pausa de 1ms para que el navegador repinte la UI sin cuelgues
         setTimeout(procesarLoteAsincrono, 1); 
       } else {
-        // Todo finalizado
         statusDiv.textContent = '¡Búsqueda completada!';
         
         setTimeout(() => { 
@@ -523,7 +511,6 @@
       }
     }
 
-    // Iniciamos la cadena de lotes
     procesarLoteAsincrono();
   }
 
@@ -538,7 +525,7 @@
       const rawFechaStr = m.fecha ? m.fecha : '';
       
       let expDato = '';
-      if (!esChunk && rawFechaStr && !rawFechaStr.match(/^(19[89]\d|20[012]\d)[-]?([01]\d)[-]?([0-3]\d)$/) && rawFechaStr.includes('-')) {
+      if (!esChunk && rawFechaStr && !rawFechaStr.match(/^(19[89]\d|20[0123]\d)[-]?([01]\d)[-]?([0-3]\d)$/) && rawFechaStr.includes('-')) {
         expDato = ` (Exp. ${rawFechaStr})`;
       }
 
@@ -689,7 +676,6 @@
   document.getElementById('cat-hcd-orden').addEventListener('change', renderizarEnlacesIndice);
   document.getElementById('cat-hcd-taqui').addEventListener('change', renderizarEnlacesIndice);
 
-  // Escuchadores de eventos listos
   botonBuscarChunks.addEventListener('click', realizarBusquedaChunks);
   
   busquedaInput.addEventListener('keydown', e => { 
