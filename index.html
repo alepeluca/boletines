@@ -10,7 +10,7 @@
     #searchContainer, #dateContainer { width: 100%; max-width: 900px; margin-bottom: 1rem; }
     #searchOptions, #categoryOptions { display: flex; gap: 1rem; margin-bottom: 1rem; justify-content: center; flex-wrap: wrap; }
     #categoryOptions { background: #e2e8f0; padding: 0.7rem; border-radius: 8px; border: 1px solid #cbd5e1; }
-    #resultados { width: 90%; max-width: 1200px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; max-height: 600px; overflow-y: auto; }
+    #resultados { width: 90%; max-width: 1200px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; max-height: 500px; overflow-y: auto; }
     
     .resultado { border: 2px solid blue; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; cursor: pointer; }
     .resultado.licitacion { border-color: #e67e22; }
@@ -18,46 +18,53 @@
     .resultado.hcd_taqui { border-color: #9b59b6; }
     
     .linea { font-weight: bold; margin-bottom: .5rem; }
+    
     .badge { display: inline-block; padding: 0.2rem 0.5rem; font-size: 0.8rem; border-radius: 4px; color: #fff; margin-right: 0.5rem; text-transform: uppercase; }
-    .badge-boletin { background-color: #0066ff; }
+    .badge-boletin { background-color: blue; }
     .badge-lici { background-color: #e67e22; }
     .badge-orden { background-color: #2ecc71; }
     .badge-taqui { background-color: #9b59b6; }
     
-    .fragmento { white-space: pre-wrap; font-size: 0.95rem; line-height: 1.4; }
+    .fragmento { white-space: pre-wrap; }
     #pdfPreview { width: 100%; max-width: 900px; min-height: 600px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
     #pdfPreview iframe { width: 100%; height: 600px; border: none; }
-    #status, #contador, #metrics { width: 100%; max-width: 900px; text-align: center; margin: .5rem 0; font-weight: bold; color: #2c3e50; }
+    #status, #contador { width: 100%; text-align: center; margin: .5rem 0; font-weight: bold; color: #2c3e50; }
     #version { margin-top: 1rem; color: #666; font-size: .9rem; font-weight: bold; }
     
-    .btn-primary { background-color: #0056b3; color: white; border: none; padding: 0.6rem 1.5rem; font-size: 1.05rem; border-radius: 4px; cursor: pointer; font-weight: bold; }
-    .btn-secondary { background-color: #2c3e50; color: white; border: none; padding: 0.6rem 2rem; font-size: 1.1rem; border-radius: 4px; cursor: pointer; font-weight: bold; }
-    .btn-primary:hover, .btn-secondary:hover { filter: brightness(1.1); }
+    .btn-primary { background-color: #0056b3; color: white; border: none; padding: 0.5rem 1rem; font-size: 1rem; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-secondary { background-color: #2c3e50; color: white; border: none; padding: 0.5rem 1rem; font-size: 1rem; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-primary:hover { background-color: #004085; }
+    .btn-secondary:hover { background-color: #1a252f; }
   </style>
 </head>
 <body>
+
   <div id="ultimaActualizacion">
     <div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.8rem; font-size:0.9rem; background:#fff; padding:0.8rem; border-radius:6px; border:1px solid #ccc; justify-content:center;">
-      <span style="font-weight:bold;">Actualizado hasta:</span> <span id="ultimaInfo">Sincronizando...</span>
+      <span style="font-weight:bold; margin-right: 0.2rem;">Actualizado hasta:</span> Sincronizando...
     </div>
   </div>
 
-  <div id="seccionDescargas" style="width: 100%; max-width: 900px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin: 0.5rem 0 1rem 0;">
-    <h4 style="margin: 0 0 0.5rem 0;">📅 Índice de Archivos y Descargas Directas</h4>
+  <div id="seccionDescargas" style="width: 100%; max-width: 900px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin: 0.5rem 0 1rem 0; box-sizing: border-box;">
+    <h4 style="margin: 0 0 0.4rem 0; display:flex; align-items:center; gap:0.5rem;">📅 Índice de Archivos y Descargas Directas</h4>
+    
     <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.8rem;">
-      <label>Filtrar Año: <select id="descFiltroAnno"><option value="TODOS">Todos</option></select></label>
+      <label>Filtrar Año: <select id="descFiltroAnno"><option value="TODOS">Todos los años</option></select></label>
       <label><input type="checkbox" id="descDesagregarMensual"> Desagregar meses</label>
-      <span id="descCargandoStatus" style="font-size:0.85rem; color:#666;">Cargando índice...</span>
+      <span id="descCargandoStatus" style="font-size:0.85rem; color:#666; font-style:italic;">Leyendo índice unificado…</span>
     </div>
-    <div id="descContenedorEnlaces" style="max-height: 220px; overflow-y: auto; padding: 0.6rem; border: 1px dashed #ccc; border-radius: 4px; background: #fafafa; display: flex; flex-direction: column; gap: 0.6rem;"></div>
+    
+    <div id="descContenedorEnlaces" style="max-height: 200px; overflow-y: auto; padding: 0.5rem; border: 1px dashed #ccc; border-radius: 4px; background: #fafafa; display: flex; flex-direction: column; gap: 0.6rem;">
+      <span style="color:#888; font-size:0.85rem; font-style:italic; text-align:center;">Construyendo grilla de descargas…</span>
+    </div>
   </div>
 
   <div id="searchContainer">
     <div id="categoryOptions">
       <label><input type="checkbox" id="cat-boletines" value="boletines" checked> Boletines Oficiales</label>
-      <label><input type="checkbox" id="cat-licitaciones" value="licitaciones"> Licitaciones</label>
-      <label><input type="checkbox" id="cat-hcd-orden" value="hcd_orden"> HCD Órdenes</label>
-      <label><input type="checkbox" id="cat-hcd-taqui" value="hcd_taqui"> HCD Taquigráficas</label>
+      <label><input type="checkbox" id="cat-licitaciones" value="licitaciones"> Licitaciones Públicas</label>
+      <label><input type="checkbox" id="cat-hcd-orden" value="hcd_orden"> HCD: Órdenes del Día</label>
+      <label><input type="checkbox" id="cat-hcd-taqui" value="hcd_taqui"> HCD: Taquigráficas</label>
     </div>
 
     <div id="searchOptions">
@@ -65,396 +72,613 @@
       <label><input type="radio" name="searchType" value="endsWith"> Termina en</label>
       <label><input type="radio" name="searchType" value="or"> Alguna palabra</label>
     </div>
-    <input id="busqueda" placeholder="Término de búsqueda (Enter para buscar)..." style="width:100%; padding:0.7rem; font-size:1.05rem; border-radius:6px; border:1px solid #ccc;">
+    <input id="busqueda" placeholder="Escribí una palabra y presioná Enter para búsqueda profunda..." style="width:100%;padding:.5rem;font-size:1rem" />
   </div>
 
   <div id="dateContainer" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; justify-content: center; margin-bottom: 1.5rem;">
-    <label>Desde: <input type="month" id="desde"></label>
-    <label>Hasta: <input type="month" id="hasta"></label>
+    <label>Desde: <input type="month" id="desde" /></label>
+    <label>Hasta: <input type="month" id="hasta" /></label>
     <select id="orden">
       <option value="desc">Más nuevos primero</option>
       <option value="asc">Más antiguos primero</option>
     </select>
   </div>
-
-  <div style="width:100%; text-align:center; margin-bottom:1.5rem;">
-    <button id="botonBuscar" class="btn-secondary">🔍 Buscar en texto completo</button>
+  
+  <div style="width: 100%; text-align: center; margin-bottom: 1.5rem;">
+    <button id="botonBuscarChunks" class="btn-secondary" style="padding: 0.6rem 2rem; font-size: 1.1rem;">🔍 Buscar</button>
   </div>
 
-  <div id="progressContainer" style="display:none; width:100%; max-width:900px; background:#e2e8f0; border-radius:9999px; height:28px; overflow:hidden; position:relative; margin:1rem 0;">
-    <div id="progressBar" style="height:100%; width:0%; background:linear-gradient(90deg,#3b82f6,#2563eb); transition:width .15s linear; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; font-size:0.9rem;"></div>
+  <div id="progressContainer" style="width: 100%; max-width: 900px; background: #e2e8f0; border-radius: 20px; height: 24px; position: relative; overflow: hidden; margin: 1rem 0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); display: none;">
+    <div id="progressBar" style="width: 0%; height: 100%; background: #3b82f6; transition: width 0.2s ease; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.9rem;"></div>
   </div>
 
   <div id="status"></div>
   <div id="contador"></div>
-  <div id="metrics"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V2.0 Web Workers • LRU Cache • Streaming</div>
+  <div id="version">V1.3.2 Asíncrona Fix Total</div>
 
 <script>
-  // ==================== CONFIG ====================
-  const CONFIG = {
-    categories: {
-      boletines: { label: 'Boletín', badge: 'badge-boletin', cls: '', folder: 'bolet', prefix: 'bolet_part_', start: 1, color: '#0066ff' },
-      licitaciones: { label: 'Licitación', badge: 'badge-lici', cls: 'licitacion', folder: 'lici', prefix: 'lici_part', start: 0, color: '#e67e22' },
-      hcd_orden: { label: 'HCD Orden', badge: 'badge-orden', cls: 'hcd_orden', folder: 'orden', prefix: 'hcd_orden_part', start: 1, color: '#2ecc71' },
-      hcd_taqui: { label: 'HCD Taqui', badge: 'badge-taqui', cls: 'hcd_taqui', folder: 'taqui', prefix: 'taqui_part', start: 1, color: '#9b59b6' }
-    }
+  const ultimaDiv = document.getElementById('ultimaActualizacion');
+  const busquedaInput = document.getElementById('busqueda');
+  const botonBuscarChunks = document.getElementById('botonBuscarChunks');
+  const resultadosDiv = document.getElementById('resultados');
+  const pdfPreview = document.getElementById('pdfPreview');
+  const statusDiv = document.getElementById('status');
+  const contadorDiv = document.getElementById('contador');
+  
+  const progressContainer = document.getElementById('progressContainer');
+  const progressBar = document.getElementById('progressBar');
+  
+  const desdeInput = document.getElementById('desde');
+  const hastaInput = document.getElementById('hasta');
+  const ordenSelect = document.getElementById('orden');
+  
+  const descFiltroAnno = document.getElementById('descFiltroAnno');
+  const descDesagregarMensual = document.getElementById('descDesagregarMensual');
+  const descCargandoStatus = document.getElementById('descCargandoStatus');
+  const descContenedorEnlaces = document.getElementById('descContenedorEnlaces');
+
+  let baseDocumentosIndexados = []; 
+  let documentosUnicosParaDescarga = [];
+  
+  let chunkCache = null;
+
+  const CONFIG_CATEGORIAS = {
+    boletines: { label: 'Boletín', badgeClass: 'badge-boletin', resultClass: '', colorHex: '#0000ff', chunkFolder: 'bolet', prefix: 'bolet_part_', startDigit: 1 },
+    licitaciones: { label: 'Licitación', badgeClass: 'badge-lici', resultClass: 'licitacion', colorHex: '#e67e22', chunkFolder: 'lici', prefix: 'lici_part', startDigit: 0 },
+    hcd_orden: { label: 'HCD Orden', badgeClass: 'badge-orden', resultClass: 'hcd_orden', colorHex: '#2ecc71', chunkFolder: 'orden', prefix: 'hcd_orden_part', startDigit: 1 },
+    hcd_taqui: { label: 'HCD Taquigráfica', badgeClass: 'badge-taqui', resultClass: 'hcd_taqui', colorHex: '#9b59b6', chunkFolder: 'taqui', prefix: 'taqui_part', startDigit: 1 }
   };
 
-  // ==================== STATE ====================
-  let metadata = [];
-  let workerPool = [];
-  let activeWorkers = 0;
-  let searchId = 0;
-  let lruCache = new Map(); // url → parsed objects
-  const MAX_LRU = 8000;
-  let lastSearchTime = 0;
-
-  // DOM
-  const els = {
-    busqueda: document.getElementById('busqueda'),
-    botonBuscar: document.getElementById('botonBuscar'),
-    resultados: document.getElementById('resultados'),
-    pdfPreview: document.getElementById('pdfPreview'),
-    status: document.getElementById('status'),
-    contador: document.getElementById('contador'),
-    metrics: document.getElementById('metrics'),
-    progressContainer: document.getElementById('progressContainer'),
-    progressBar: document.getElementById('progressBar'),
-    ultimaInfo: document.getElementById('ultimaInfo'),
-    descFiltroAnno: document.getElementById('descFiltroAnno'),
-    descDesagregarMensual: document.getElementById('descDesagregarMensual'),
-    descContenedorEnlaces: document.getElementById('descContenedorEnlaces')
-  };
-
-  // ==================== WEB WORKER ====================
-  function createWorker() {
-    const workerCode = `
-      self.onmessage = function(e) {
-        const { id, task, data } = e.data;
-        if (task === 'processChunk') {
-          const lines = data.text.split('\\n');
-          const results = [];
-          const regex = new RegExp(data.regexSource, data.regexFlags);
-          
-          for (let line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const obj = JSON.parse(line);
-              obj._cat = data.category;
-              
-              let match = false;
-              if (obj._cat === 'licitaciones') {
-                match = regex.test(obj.fragmento || '') || regex.test(obj.codigo || '') || regex.test(obj.archivo || '');
-              } else {
-                match = regex.test(obj.fragmento || '');
-              }
-              
-              if (match && data.dateFilter) {
-                const fecha8 = (obj.fecha || obj.fecha_acta || obj.archivo || '').replace(/[^0-9]/g,'').slice(0,8);
-                if (fecha8 < data.from || fecha8 > data.to) match = false;
-              }
-              
-              if (match) {
-                results.push({
-                  cat: obj._cat,
-                  archivo: obj.archivo || '',
-                  url: obj.url || '#',
-                  fecha: obj.fecha || obj.fecha_acta || '',
-                  pagina: obj.pagina || 1,
-                  fragmento: obj.fragmento || '',
-                  fecha8: (obj.fecha || obj.fecha_acta || obj.archivo || '').replace(/[^0-9]/g,'').slice(0,8) || '19000101'
-                });
-              }
-            } catch(_) {}
-          }
-          self.postMessage({ id, results, chunks: 1 });
-        }
-      };
-    `;
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
-    return new Worker(URL.createObjectURL(blob));
-  }
-
-  function initWorkerPool() {
-    const concurrency = Math.min(navigator.hardwareConcurrency || 4, 8);
-    for (let i = 0; i < concurrency; i++) {
-      workerPool.push(createWorker());
-    }
-  }
-
-  // ==================== FETCH WITH CONCURRENCY LIMIT ====================
-  async function fetchWithPool(url) {
-    return fetch(url);
-  }
-
-  // ==================== LOAD METADATA ====================
-  async function loadMetadata() {
-    try {
-      const res = await fetch('indice_documentos.csv');
-      if (!res.ok) throw new Error('CSV not found');
-      const text = await res.text();
-      metadata = parseCSV(text);
-      metadata.forEach(m => m.datosFecha = parseDate(m));
-      renderLastUpdate();
-      buildDownloadSection();
-    } catch (e) {
-      console.error(e);
-      els.ultimaInfo.textContent = 'Error al cargar metadatos';
-    }
-  }
-
-  function parseCSV(text) {
+  function parsearCSV(text) {
     const lines = text.split(/\r?\n/);
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,'').toLowerCase());
-    const result = [];
+    if (lines.length === 0) return [];
+    
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
+    const rows = [];
+
     for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
-      const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-      const obj = {};
-      headers.forEach((h, idx) => obj[h] = (values[idx] || '').replace(/^"|"$/g,''));
-      obj.categoria = normalizeCategory(obj.categoria || '');
-      result.push(obj);
-    }
-    return result;
-  }
+      const line = lines[i].trim();
+      if (!line) continue;
 
-  function normalizeCategory(cat) {
-    const c = cat.toLowerCase();
-    if (c.includes('bolet')) return 'boletines';
-    if (c.includes('lici')) return 'licitaciones';
-    if (c.includes('orden')) return 'hcd_orden';
-    if (c.includes('taqui')) return 'hcd_taqui';
-    return cat;
-  }
+      let arr = [];
+      let insideQuote = false;
+      let entry = '';
 
-  function parseDate(obj) {
-    let raw = (obj.fecha || obj.archivo || '').replace(/[^\d]/g,'');
-    if (raw.length >= 8) {
-      const y = raw.slice(0,4), m = raw.slice(4,6), d = raw.slice(6,8);
-      return { sortable: y+m+d, display: `${d}/${m}/${y}`, year: y, month: m };
-    }
-    return { sortable: '19000101', display: 'S/F', year: 'N/D', month: '01' };
-  }
+      for (let j = 0; j < line.length; j++) {
+        let char = line[j];
+        if (char === '"') insideQuote = !insideQuote;
+        else if (char === ',' && !insideQuote) { arr.push(entry.trim()); entry = ''; }
+        else entry += char;
+      }
+      arr.push(entry.trim());
 
-  // ==================== LRU CACHE ====================
-  function getFromCache(key) {
-    if (lruCache.has(key)) {
-      const value = lruCache.get(key);
-      lruCache.delete(key);
-      lruCache.set(key, value);
-      return value;
-    }
-    return null;
-  }
+      if (arr.length >= headers.length) {
+        let obj = {};
+        headers.forEach((h, index) => {
+          let val = arr[index] ? arr[index].replace(/^"|"$/g, '') : '';
+          obj[h] = val;
+        });
+        
+        obj.categoria = obj.categoria || arr[0] || '';
+        let catLow = obj.categoria.toLowerCase();
+        if (catLow.includes('bolet')) obj.categoria = 'boletines';
+        else if (catLow.includes('lici')) obj.categoria = 'licitaciones';
+        else if (catLow.includes('orden')) obj.categoria = 'hcd_orden';
+        else if (catLow.includes('taqui')) obj.categoria = 'hcd_taqui';
 
-  function setToCache(key, value) {
-    if (lruCache.size >= MAX_LRU) {
-      const firstKey = lruCache.keys().next().value;
-      lruCache.delete(firstKey);
-    }
-    lruCache.set(key, value);
-  }
-
-  // ==================== SEARCH ENGINE ====================
-  async function performSearch() {
-    const query = els.busqueda.value.trim();
-    if (!query) return alert('Ingrese un término');
-
-    const currentSearchId = ++searchId;
-    const startTime = performance.now();
-
-    const activeCats = Object.keys(CONFIG.categories).filter(k => document.getElementById(`cat-${k}`).checked);
-    if (activeCats.length === 0) return;
-
-    els.status.textContent = 'Iniciando búsqueda con Web Workers...';
-    els.progressContainer.style.display = 'block';
-    els.progressBar.style.width = '5%';
-    els.resultados.innerHTML = '';
-    els.pdfPreview.innerHTML = '';
-
-    let allResults = [];
-    let processedChunks = 0;
-
-    const regexMode = document.querySelector('input[name="searchType"]:checked').value;
-    let regexStr = query;
-    if (regexMode === 'endsWith') regexStr = query + '$';
-    else if (regexMode === 'or') regexStr = query.split(/\s+/).join('|');
-
-    const fromDate = (document.getElementById('desde').value || '1900-01').replace(/-/g,'') + '00';
-    const toDate = (document.getElementById('hasta').value || '2099-12').replace(/-/g,'') + '99';
-
-    const manifestRes = await fetch('manifest.json').catch(() => ({ ok: false }));
-    let filesToProcess = [];
-
-    if (manifestRes.ok) {
-      const manifest = await manifestRes.json();
-      filesToProcess = Object.entries(manifest).flatMap(([cat, parts]) => 
-        parts.filter(p => activeCats.includes(cat)).map(p => ({cat, url: p}))
-      );
-    } else {
-      // fallback a discovery (limitado)
-      for (const cat of activeCats) {
-        const conf = CONFIG.categories[cat];
-        for (let i = conf.start; i < 80; i++) {
-          const part = String(i).padStart(4,'0');
-          filesToProcess.push({cat, url: `json_chunks/${conf.folder}/${conf.prefix}${part}.jsonl`});
-        }
+        obj.archivo = obj.archivo || arr[1];
+        obj.url = obj.url || arr[2];
+        obj.fecha = obj.fecha || arr[3];
+        obj.extra_info = obj.extra_info || arr[4];
+        obj.pagina = obj.pagina || arr[5] || '1';
+        
+        rows.push(obj);
       }
     }
-
-    const totalFiles = filesToProcess.length;
-    let completed = 0;
-
-    const workerPromises = filesToProcess.map(async (fileInfo, idx) => {
-      if (currentSearchId !== searchId) return; // cancelled
-
-      const worker = workerPool[idx % workerPool.length];
-      
-      try {
-        const res = await fetchWithPool(fileInfo.url);
-        if (!res.ok) return;
-        
-        const text = await res.text();
-        const cacheKey = fileInfo.url;
-        let parsed = getFromCache(cacheKey);
-        
-        if (!parsed) {
-          // worker will parse
-        }
-
-        worker.onmessage = (e) => {
-          if (e.data.id !== currentSearchId) return;
-          allResults.push(...e.data.results);
-          processedChunks += e.data.chunks;
-          completed++;
-
-          const progress = Math.round((completed / totalFiles) * 100);
-          els.progressBar.style.width = `${progress}%`;
-          els.progressBar.textContent = `${progress}%`;
-        };
-
-        worker.postMessage({
-          id: currentSearchId,
-          task: 'processChunk',
-          data: {
-            text: text,
-            regexSource: regexStr,
-            regexFlags: 'gi',
-            category: fileInfo.cat,
-            from: fromDate,
-            to: toDate,
-            dateFilter: true
-          }
-        });
-
-      } catch (_) {}
-    });
-
-    await Promise.all(workerPromises);
-
-    const endTime = performance.now();
-    lastSearchTime = (endTime - startTime).toFixed(0);
-
-    // sort
-    const order = document.getElementById('orden').value;
-    allResults.sort((a,b) => order === 'asc' 
-      ? a.fecha8.localeCompare(b.fecha8) 
-      : b.fecha8.localeCompare(a.fecha8));
-
-    renderResults(allResults, new RegExp(regexStr, 'gi'));
-    
-    els.metrics.textContent = `⏱ ${lastSearchTime}ms | ${processedChunks} chunks`;
-    els.progressContainer.style.display = 'none';
+    return rows;
   }
 
-  function renderResults(matches, regex) {
-    els.contador.textContent = `${matches.length} resultados`;
-    if (!matches.length) {
-      els.resultados.innerHTML = '<p style="text-align:center;padding:2rem;color:#666;">No se encontraron coincidencias.</p>';
+  function obtenerDatosFecha(obj) {
+    let rawFecha = obj.fecha ? obj.fecha.replace(/[^\d-]/g, '') : '';
+    
+    let matchStandard = rawFecha.match(/^(19[89]\d|20[0123]\d)[-]?([01]\d)[-]?([0-3]\d)$/);
+    if (matchStandard) {
+      return {
+        sortable: matchStandard[1] + matchStandard[2] + matchStandard[3],
+        display: `${matchStandard[3]}/${matchStandard[2]}/${matchStandard[1]}`,
+        year: matchStandard[1], month: matchStandard[2]
+      };
+    }
+
+    let textoTarget = (obj.archivo || '') + ' ' + (obj.extra_info || '');
+    let matchYear = textoTarget.match(/\b(19[89]\d|20[0123]\d)\b/);
+    if (matchYear) {
+      return {
+        sortable: matchYear[1] + "0101",
+        display: `Año ${matchYear[1]}`,
+        year: matchYear[1], month: "01"
+      };
+    }
+
+    return { sortable: "19000101", display: "S/F", year: "N/D", month: "01" };
+  }
+
+  function normalizarFechaChunk(obj) {
+    if (obj.fecha) return obj.fecha.replace(/[^\d]/g, '').slice(0, 8);
+    if (obj.fecha_acta) return obj.fecha_acta.replace(/[^\d]/g, '').slice(0, 8);
+    
+    let nombre = obj.archivo || '';
+    let match = nombre.match(/^(\d{8})/);
+    if (match) return match[1];
+    
+    return "19000101";
+  }
+
+  function extraerCodigoLimpio(obj) {
+    if (obj.categoria === 'boletines') {
+      const m = (obj.url || obj.archivo || '').match(/boletin[-_](\d+)/i);
+      if (m) return m[1];
+    } else if (obj.categoria === 'licitaciones') {
+      const m = (obj.url || '').match(/\/([^\/]+)\.pdf$/i);
+      if (m) return m[1];
+      const m2 = (obj.archivo || '').match(/LiciPubli_([0-9-]+)_/i);
+      if (m2) return m2[1];
+    } else {
+      const m = (obj.url || '').match(/\/([^\/]+)\.pdf$/i);
+      if (m) return m[1];
+      const m2 = (obj.archivo || '').match(/_part([0-9]+)/i);
+      if (m2) return m2[1];
+    }
+    return 'S/N';
+  }
+
+  function autocompletarFechas() {
+    let minSortable = '99999999';
+    let maxSortable = '00000000';
+    
+    baseDocumentosIndexados.forEach(obj => {
+      const s = obj.datosFecha.sortable;
+      if (s !== '19000101' && s.length === 8) {
+        if (s < minSortable) minSortable = s;
+        if (s > maxSortable) maxSortable = s;
+      }
+    });
+    
+    if (minSortable !== '99999999') {
+      desdeInput.value = `${minSortable.slice(0,4)}-${minSortable.slice(4,6)}`;
+    }
+    
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    hastaInput.value = `${yyyy}-${mm}`;
+  }
+
+  async function cargarBaseDeDatosCSV() {
+    try {
+      const respuesta = await fetch('indice_documentos.csv');
+      if (!respuesta.ok) throw new Error("No se encontró el índice CSV.");
+      
+      const textoCSV = await respuesta.text();
+      
+      baseDocumentosIndexados = parsearCSV(textoCSV);
+      baseDocumentosIndexados.forEach(obj => { obj.datosFecha = obtenerDatosFecha(obj); });
+      
+      descCargandoStatus.textContent = ""; 
+      
+      autocompletarFechas(); 
+      procesarMetadatosYDescargas();
+      mostrarUltimaActualizacion();
+    } catch (err) {
+      console.error(err);
+      descCargandoStatus.textContent = "❌ Error cargando CSV";
+      ultimaDiv.innerHTML = "Error al inicializar la base de datos remota.";
+    }
+  }
+
+  function mostrarUltimaActualizacion() {
+    ultimaDiv.innerHTML = '<div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.8rem; font-size:0.9rem; background:#fff; padding:0.8rem; border-radius:6px; border:1px solid #ccc; justify-content:center;">' +
+                          '<span style="font-weight:bold; margin-right: 0.2rem;">Actualizado hasta:</span></div>';
+    const container = ultimaDiv.firstChild;
+
+    Object.keys(CONFIG_CATEGORIAS).forEach(key => {
+        const conf = CONFIG_CATEGORIAS[key];
+        const subGrupo = baseDocumentosIndexados.filter(d => d.categoria === key);
+        
+        if (subGrupo.length === 0) {
+            container.innerHTML += `<span style="border-left: 4px solid #ccc; padding-left:5px; color:#666;"><strong>${conf.label}:</strong> Sin datos</span>`;
+            return;
+        }
+
+        // Ordenamos estrictamente de forma cronológica descendente usando sortable
+        subGrupo.sort((a, b) => b.datosFecha.sortable.localeCompare(a.datosFecha.sortable));
+
+        const ultimo = subGrupo[0];
+        const idDoc = extraerCodigoLimpio(ultimo);
+        const fechaDisplay = ultimo.datosFecha.display !== 'S/F' ? `${ultimo.datosFecha.display}` : 'Sin Fecha';
+        
+        if (key === 'hcd_orden') {
+            container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Orden del día:</strong> Sesión ${fechaDisplay}</span>`;
+        } else if (key === 'hcd_taqui') {
+            container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Taquigráfica:</strong> Sesión ${fechaDisplay}</span>`;
+        } else {
+            const fechaParentesis = ultimo.datosFecha.display !== 'S/F' ? ` (${ultimo.datosFecha.display})` : '';
+            container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>${conf.label}:</strong> N.º ${idDoc}${fechaParentesis}</span>`;
+        }
+    });
+  }
+
+  function cargarPDF(urlCompleta) {
+    pdfPreview.innerHTML = '<p>Cargando visor de PDF…</p>';
+    const iframe = document.createElement('iframe');
+    iframe.src = urlCompleta;
+    pdfPreview.innerHTML = '';
+    pdfPreview.appendChild(iframe);
+  }
+
+  async function descargarTodoElCacheChunks() {
+    if (!chunkCache) {
+      chunkCache = [];
+    }
+    
+    const categoriasActivas = [];
+    if(document.getElementById('cat-boletines').checked) categoriasActivas.push('boletines');
+    if(document.getElementById('cat-licitaciones').checked) categoriasActivas.push('licitaciones');
+    if(document.getElementById('cat-hcd-orden').checked) categoriasActivas.push('hcd_orden');
+    if(document.getElementById('cat-hcd-taqui').checked) categoriasActivas.push('hcd_taqui');
+
+    const categoriasPorDescargar = categoriasActivas.filter(cat => {
+      return !chunkCache.some(obj => obj._categoriaInterna === cat);
+    });
+
+    if (categoriasPorDescargar.length === 0) {
       return;
     }
 
-    // preload first PDF
-    if (matches[0]) loadPDF(matches[0].url, matches[0].pagina);
+    statusDiv.textContent = 'Fase 1/2: Descargando índices de texto profundo...';
+    progressContainer.style.display = 'block';
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+    
+    let totalCategorias = categoriasPorDescargar.length;
+    let archivosDescargadosContador = 0;
+    
+    for (let i = 0; i < totalCategorias; i++) {
+      const catKey = categoriasPorDescargar[i];
+      const conf = CONFIG_CATEGORIAS[catKey];
+      let partIdx = conf.startDigit;
+      let consecutiveErrors = 0;
+      
+      while (consecutiveErrors < 2 && partIdx < 999) {
+        const partStr = String(partIdx).padStart(4, '0');
+        const urlChunk = `json_chunks/${conf.chunkFolder}/${conf.prefix}${partStr}.jsonl`;
+        
+        try {
+          const res = await fetch(urlChunk);
+          if (!res.ok) {
+            consecutiveErrors++;
+            partIdx++;
+            continue;
+          }
+          
+          consecutiveErrors = 0;
+          const text = await res.text();
+          const lines = text.split('\n');
+          
+          lines.forEach(line => {
+            if (!line.trim()) return;
+            try {
+              let obj = JSON.parse(line);
+              obj._categoriaInterna = catKey;
+              chunkCache.push(obj);
+            } catch(e){}
+          });
+          
+          partIdx++;
+          
+          archivosDescargadosContador++;
+          let porcentajeDinamic = Math.min(Math.round((archivosDescargadosContador / (totalCategorias * 70)) * 50), 50);
+          
+          progressBar.style.width = porcentajeDinamic + '%';
+          if (porcentajeDinamic > 0) {
+            progressBar.textContent = porcentajeDinamic + '%';
+          }
+          
+        } catch (err) {
+          consecutiveErrors++;
+          partIdx++;
+        }
+      }
+    }
+    
+    statusDiv.textContent = '¡Descarga completada! Preparando fase de búsqueda...';
+    progressBar.style.width = '50%';
+    progressBar.textContent = '50%';
+  }
 
-    const fragment = document.createDocumentFragment();
+  async function realizarBusquedaChunks() {
+    const q = busquedaInput.value.trim();
+    if (!q) {
+      alert("Por favor, ingresá un término de búsqueda.");
+      return;
+    }
+
+    const categoriasActivas = [];
+    if(document.getElementById('cat-boletines').checked) categoriasActivas.push('boletines');
+    if(document.getElementById('cat-licitaciones').checked) categoriasActivas.push('licitaciones');
+    if(document.getElementById('cat-hcd-orden').checked) categoriasActivas.push('hcd_orden');
+    if(document.getElementById('cat-hcd-taqui').checked) categoriasActivas.push('hcd_taqui');
+
+    if (categoriasActivas.length === 0) {
+      resultadosDiv.innerHTML = '<p>Seleccioná al menos una categoría.</p>';
+      return;
+    }
+
+    if (!chunkCache || categoriasActivas.some(cat => !chunkCache.some(obj => obj._categoriaInterna === cat))) {
+      await descargarTodoElCacheChunks();
+    } else {
+      progressContainer.style.display = 'block';
+    }
+
+    statusDiv.textContent = 'Fase 2/2: Buscando coincidencias en memoria...';
+    resultadosDiv.innerHTML = '';
+    pdfPreview.innerHTML = '';
+
+    let regex;
+    const mode = document.querySelector('input[name="searchType"]:checked').value;
+    if (mode === 'endsWith') regex = new RegExp(q + '$', 'i');
+    else if (mode === 'or') regex = new RegExp(q.split('|').join('|'), 'i');
+    else regex = new RegExp(q, 'i');
+
+    const desdeString = desdeInput.value ? desdeInput.value.replace(/-/g, '') + '00' : '00000000';
+    const hastaString = hastaInput.value ? hastaInput.value.replace(/-/g, '') + '32' : '99999999';
+
+    let matches = [];
+    
+    const totalChunksAProcesar = chunkCache.length;
+    let indexActual = 0;
+    const TAMANO_LOTE = 2500;
+
+    function procesarLoteAsincrono() {
+      const limiteLote = Math.min(indexActual + TAMANO_LOTE, totalChunksAProcesar);
+      
+      for (let i = indexActual; i < limiteLote; i++) {
+        const obj = chunkCache[i];
+        if (!categoriasActivas.includes(obj._categoriaInterna)) continue;
+        
+        const fecha8 = normalizarFechaChunk(obj);
+        if (fecha8 < desdeString || fecha8 > hastaString) continue;
+
+        let cumple = false;
+        if (obj._categoriaInterna === 'licitaciones') {
+          if (regex.test(obj.fragmento || '') || regex.test(obj.codigo || '') || regex.test(obj.archivo || '')) cumple = true;
+        } else {
+          if (regex.test(obj.fragmento || '')) cumple = true;
+        }
+
+        if (cumple) {
+          matches.push({
+            categoria: obj._categoriaInterna,
+            archivo: obj.archivo || '',
+            url: obj.url || '#',
+            fecha: obj.fecha || obj.fecha_acta || '',
+            pagina: obj.pagina || 1,
+            extra_info: obj.fragmento || '',
+            datosFecha: {
+              sortable: fecha8,
+              display: fecha8 !== '19000101' ? `${fecha8.slice(6,8)}/${fecha8.slice(4,6)}/${fecha8.slice(0,4)}` : 'S/F'
+            }
+          });
+        }
+      }
+
+      indexActual = limiteLote;
+      
+      let avanceBusqueda = totalChunksAProcesar > 0 ? (indexActual / totalChunksAProcesar) * 50 : 50;
+      let porcentajeFinal = Math.round(50 + avanceBusqueda);
+      
+      progressBar.style.width = porcentajeFinal + '%';
+      progressBar.textContent = porcentajeFinal + '%';
+
+      if (indexActual < totalChunksAProcesar) {
+        setTimeout(procesarLoteAsincrono, 1); 
+      } else {
+        statusDiv.textContent = '¡Búsqueda completada!';
+        
+        setTimeout(() => { 
+          progressContainer.style.display = 'none'; 
+          statusDiv.textContent = '';
+        }, 1200);
+
+        matches.sort((a, b) => {
+          const da = a.datosFecha.sortable, db = b.datosFecha.sortable;
+          return ordenSelect.value === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
+        });
+
+        if (!matches.length) {
+          resultadosDiv.innerHTML = '<p>No se encontraron resultados en la búsqueda textual.</p>';
+          contadorDiv.textContent = '0 resultados';
+          return;
+        }
+
+        renderizarResultadosFinales(matches, regex, true);
+      }
+    }
+
+    procesarLoteAsincrono();
+  }
+
+  function renderizarResultadosFinales(matches, regex, esChunk) {
+    contadorDiv.textContent = `${matches.length} resultados encontrados`;
+    
+    const primero = matches[0];
+    cargarPDF(`${primero.url}#page=${primero.pagina || 1}`);
 
     matches.forEach(m => {
-      const conf = CONFIG.categories[m.cat];
+      const idDoc = esChunk ? m.archivo.replace('.pdf', '') : extraerCodigoLimpio(m);
+      const rawFechaStr = m.fecha ? m.fecha : '';
+      
+      let expDato = '';
+      if (!esChunk && rawFechaStr && !rawFechaStr.match(/^(19[89]\d|20[0123]\d)[-]?([01]\d)[-]?([0-3]\d)$/) && rawFechaStr.includes('-')) {
+        expDato = ` (Exp. ${rawFechaStr})`;
+      }
+
+      const conf = CONFIG_CATEGORIAS[m.categoria] || { label: 'Documento', badgeClass: '', resultClass: '', colorHex: '#666' };
+
       const div = document.createElement('div');
-      div.className = `resultado ${conf.cls}`;
+      div.className = `resultado ${conf.resultClass}`; 
       div.innerHTML = `
         <div class="linea">
-          <span class="badge ${conf.badge}">${conf.label}</span>
-          <a href="${m.url}" target="_blank">${m.archivo.replace('.pdf','')}</a> — ${m.fecha || 'S/F'} (pág. ${m.pagina})
+          <span class="badge ${conf.badgeClass}">${conf.label}</span>
+          <a href="${m.url}" target="_blank">${conf.label}: ${idDoc}${expDato} – ${m.datosFecha.display}</a> (pág. ${m.pagina || 1})
         </div>
-        <div class="fragmento">${(m.fragmento || '').replace(regex, '<mark>$&</mark>')}</div>
+        <div class="fragmento">${(m.extra_info || 'Sin descripción').replace(regex, '<mark>$&</mark>')}</div>
       `;
-      div.onclick = (e) => {
-        if (e.target.tagName !== 'A') loadPDF(m.url, m.pagina);
+      
+      div.onclick = (e) => { 
+        if(e.target.tagName !== 'A') cargarPDF(`${m.url}#page=${m.pagina || 1}`); 
       };
-      fragment.appendChild(div);
-    });
-
-    els.resultados.appendChild(fragment);
-  }
-
-  function loadPDF(url, page = 1) {
-    els.pdfPreview.innerHTML = `<iframe src="${url}#page=${page}"></iframe>`;
-  }
-
-  // ==================== UI HELPERS ====================
-  function renderLastUpdate() {
-    // similar to original but optimized
-    let html = '';
-    Object.keys(CONFIG.categories).forEach(key => {
-      const items = metadata.filter(m => m.categoria === key);
-      if (!items.length) return;
-      items.sort((a,b) => b.datosFecha.sortable.localeCompare(a.datosFecha.sortable));
-      const latest = items[0];
-      html += `<span style="margin:0 12px;"><strong>${CONFIG.categories[key].label}:</strong> ${latest.archivo || '—'}</span>`;
-    });
-    els.ultimaInfo.innerHTML = html || 'Datos cargados';
-  }
-
-  function buildDownloadSection() {
-    // reuse logic from original with improvements
-    // (kept minimal for brevity - can be expanded)
-    els.descFiltroAnno.innerHTML = '<option value="TODOS">Todos los años</option>';
-    const years = [...new Set(metadata.map(m => m.datosFecha.year))].filter(y => y !== 'N/D').sort().reverse();
-    years.forEach(y => {
-      const opt = document.createElement('option');
-      opt.value = y;
-      opt.textContent = y;
-      els.descFiltroAnno.appendChild(opt);
-    });
-    // add listeners and rendering as needed
-  }
-
-  // ==================== INIT ====================
-  function init() {
-    initWorkerPool();
-    loadMetadata();
-
-    els.botonBuscar.addEventListener('click', performSearch);
-    els.busqueda.addEventListener('keydown', e => {
-      if (e.key === 'Enter') performSearch();
-    });
-
-    // debounce example
-    let timeout;
-    els.busqueda.addEventListener('input', () => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => {
-        if (els.busqueda.value.length > 3) performSearch();
-      }, 600);
+      resultadosDiv.appendChild(div);
     });
   }
 
-  window.onload = init;
+  function procesarMetadatosYDescargas() {
+    let mapeoDocsUnicos = {};
+    let annosExistentes = new Set();
+
+    baseDocumentosIndexados.forEach(obj => {
+      if (!obj.url) return;
+      if (!mapeoDocsUnicos[obj.url]) {
+        const dF = obj.datosFecha;
+        if (dF.year !== 'N/D') annosExistentes.add(dF.year);
+
+        mapeoDocsUnicos[obj.url] = {
+          url: obj.url,
+          categoriaKey: obj.categoria,
+          anno: dF.year,
+          mes: dF.month,
+          identificador: extraerCodigoLimpio(obj),
+          datosFecha: dF
+        };
+      }
+    });
+
+    documentosUnicosParaDescarga = Object.values(mapeoDocsUnicos);
+    
+    descFiltroAnno.innerHTML = '<option value="TODOS">Todos los años</option>';
+    Array.from(annosExistentes).sort((a, b) => b.localeCompare(a)).forEach(a => {
+      descFiltroAnno.innerHTML += `<option value="${a}">${a}</option>`;
+    });
+
+    const todayYear = new Date().getFullYear().toString();
+    if (annosExistentes.has(todayYear)) {
+      descFiltroAnno.value = todayYear;
+    } else {
+      descFiltroAnno.value = "TODOS";
+    }
+
+    renderizarEnlacesIndice();
+  }
+
+  function renderizarEnlacesIndice() {
+    if (documentosUnicosParaDescarga.length === 0) {
+      descContenedorEnlaces.innerHTML = '<span style="color:#888; font-size:0.85rem;">No hay registros cargados.</span>';
+      return;
+    }
+
+    const boletinesChecked = document.getElementById('cat-boletines').checked;
+    const licitacionesChecked = document.getElementById('cat-licitaciones').checked;
+    const ordenesChecked = document.getElementById('cat-hcd-orden').checked;
+    const taquiChecked = document.getElementById('cat-hcd-taqui').checked;
+
+    const annoFiltro = descFiltroAnno.value;
+    const desagregarM = descDesagregarMensual.checked;
+
+    let filtrados = documentosUnicosParaDescarga.filter(d => {
+      if (d.categoriaKey === 'boletines' && !boletinesChecked) return false;
+      if (d.categoriaKey === 'licitaciones' && !licitacionesChecked) return false;
+      if (d.categoriaKey === 'hcd_orden' && !ordenesChecked) return false;
+      if (d.categoriaKey === 'hcd_taqui' && !taquiChecked) return false;
+      return true;
+    });
+
+    if (annoFiltro !== 'TODOS') filtrados = filtrados.filter(d => d.anno === annoFiltro);
+    filtrados.sort((a, b) => b.datosFecha.sortable.localeCompare(a.datosFecha.sortable));
+
+    descContenedorEnlaces.innerHTML = '';
+    const mesesNombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    if (desagregarM) {
+      let agrupados = {};
+      filtrados.forEach(d => {
+        if (!agrupados[d.anno]) agrupados[d.anno] = {};
+        if (!agrupados[d.anno][d.mes]) agrupados[d.anno][d.mes] = [];
+        agrupados[d.anno][d.mes].push(d);
+      });
+
+      Object.keys(agrupados).sort((a, b) => b.localeCompare(a)).forEach(a => {
+        Object.keys(agrupados[a]).sort((a, b) => b.localeCompare(a)).forEach(m => {
+          const mNombre = mesesNombres[parseInt(m, 10) - 1] || `Mes ${m}`;
+          const bloque = document.createElement('div');
+          bloque.innerHTML = `<div style="font-weight:bold; font-size:0.85rem; color:#2c3e50; border-bottom:1px solid #e2e8f0; margin-top:0.3rem; padding-bottom:1px;">📂 ${mNombre} ${a}</div>`;
+          
+          const wrapper = document.createElement('div');
+          wrapper.style.display = 'flex'; wrapper.style.flexWrap = 'wrap'; wrapper.style.gap = '0.4rem'; wrapper.style.padding = '0.3rem 0';
+          
+          agrupados[a][m].forEach(doc => { wrapper.appendChild(crearElementoLink(doc)); });
+          bloque.appendChild(wrapper);
+          descContenedorEnlaces.appendChild(bloque);
+        });
+      });
+    } else {
+      let agrupadosAnno = {};
+      filtrados.forEach(d => {
+        if (!agrupadosAnno[d.anno]) agrupadosAnno[d.anno] = [];
+        agrupadosAnno[d.anno].push(d);
+      });
+
+      Object.keys(agrupadosAnno).sort((a, b) => b.localeCompare(a)).forEach(a => {
+        const bloque = document.createElement('div');
+        bloque.innerHTML = `<div style="font-weight:bold; font-size:0.85rem; color:#2c3e50; border-bottom:1px solid #e2e8f0; margin-top:0.3rem; padding-bottom:1px;">🗓️ Año ${a}</div>`;
+        
+        const wrapper = document.createElement('div');
+        wrapper.style.display = 'flex'; wrapper.style.flexWrap = 'wrap'; wrapper.style.gap = '0.4rem'; wrapper.style.padding = '0.3rem 0';
+        
+        agrupadosAnno[a].forEach(doc => { wrapper.appendChild(crearElementoLink(doc)); });
+        bloque.appendChild(wrapper);
+        descContenedorEnlaces.appendChild(bloque);
+      });
+    }
+  }
+
+  function crearElementoLink(doc) {
+    const conf = CONFIG_CATEGORIAS[doc.categoriaKey] || { label: 'Doc', colorHex: '#666' };
+    const link = document.createElement('a');
+    link.href = doc.url; 
+    link.target = '_blank';
+    link.style.textDecoration = 'none'; link.style.fontSize = '0.78rem'; link.style.padding = '0.2rem 0.4rem';
+    link.style.borderRadius = '4px'; link.style.color = '#fff'; link.style.fontWeight = 'bold'; link.style.display = 'inline-block';
+    link.style.backgroundColor = conf.colorHex;
+    link.textContent = `${conf.label} N.º ${doc.identificador}`;
+    return link;
+  }
+
+  descFiltroAnno.addEventListener('change', renderizarEnlacesIndice);
+  descDesagregarMensual.addEventListener('change', renderizarEnlacesIndice);
+  document.getElementById('cat-boletines').addEventListener('change', renderizarEnlacesIndice);
+  document.getElementById('cat-licitaciones').addEventListener('change', renderizarEnlacesIndice);
+  document.getElementById('cat-hcd-orden').addEventListener('change', renderizarEnlacesIndice);
+  document.getElementById('cat-hcd-taqui').addEventListener('change', renderizarEnlacesIndice);
+
+  botonBuscarChunks.addEventListener('click', realizarBusquedaChunks);
+  
+  busquedaInput.addEventListener('keydown', e => { 
+    if(e.key === 'Enter') realizarBusquedaChunks();
+  });
+
+  cargarBaseDeDatosCSV();
 </script>
 </body>
 </html>
