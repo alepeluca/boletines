@@ -5,586 +5,680 @@
   <title>Buscador Integrado Municipal</title>
   <link href="https://fonts.googleapis.com/css2?family=Mohave&display=swap" rel="stylesheet">
   <style>
-    body { font-family: 'Mohave', sans-serif; margin: 2rem auto; max-width: 1200px; background: #f0f0f0; display: flex; flex-direction: column; align-items: center; color: #333; }
-    #headerContainer { width: 100%; max-width: 1000px; display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 2rem; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-    h1 { margin: 0; color: #1e293b; font-size: 2.5rem; }
+    body { font-family: 'Mohave', sans-serif; margin: 2rem auto; max-width: 1200px; background: #f0f0f0; display: flex; flex-direction: column; align-items: center; }
+    #ultimaActualizacion { width: 100%; max-width: 900px; margin-bottom: 1rem; }
+    #searchContainer, #dateContainer { width: 100%; max-width: 900px; margin-bottom: 1rem; }
+    #searchOptions, #categoryOptions { display: flex; gap: 1rem; margin-bottom: 1rem; justify-content: center; flex-wrap: wrap; }
+    #categoryOptions { background: #e2e8f0; padding: 0.7rem; border-radius: 8px; border: 1px solid #cbd5e1; }
+    #resultados { width: 90%; max-width: 1200px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; max-height: 500px; overflow-y: auto; }
     
-    #ultimaActualizacion { width: 100%; max-width: 1000px; margin-bottom: 1rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    #ultimaActualizacion h3 { margin-top: 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; color: #334155; }
+    .resultado { border: 2px solid blue; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; cursor: pointer; }
+    .resultado.licitacion { border-color: #e67e22; }
+    .resultado.hcd_orden { border-color: #2ecc71; }
+    .resultado.hcd_taqui { border-color: #9b59b6; }
     
-    .panel { width: 100%; max-width: 1000px; background: #fff; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); box-sizing: border-box; }
+    .linea { font-weight: bold; margin-bottom: .5rem; }
     
-    #searchContainer { display: flex; gap: 1rem; justify-content: center; }
-    #searchInput { flex: 1; padding: 0.75rem; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 1.1rem; }
+    .badge { display: inline-block; padding: 0.2rem 0.5rem; font-size: 0.8rem; border-radius: 4px; color: #fff; margin-right: 0.5rem; text-transform: uppercase; }
+    .badge-boletin { background-color: blue; }
+    .badge-lici { background-color: #e67e22; }
+    .badge-orden { background-color: #2ecc71; }
+    .badge-taqui { background-color: #9b59b6; }
     
-    #searchOptions, #categoryOptions { display: flex; gap: 1.5rem; margin-top: 1rem; justify-content: center; flex-wrap: wrap; }
-    #categoryOptions { background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0; }
+    .fragmento { white-space: pre-wrap; }
+    #pdfPreview { width: 100%; max-width: 900px; min-height: 600px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
+    #pdfPreview iframe { width: 100%; height: 600px; border: none; }
+    #status, #contador { width: 100%; text-align: center; margin: .5rem 0; font-weight: bold; color: #2c3e50; }
+    #version { margin-top: 1rem; color: #666; font-size: .9rem; font-weight: bold; }
     
-    .opcion-label { cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 500; }
-    
-    #dateContainer { display: flex; gap: 1.5rem; justify-content: center; margin-top: 1rem; flex-wrap: wrap; align-items: center; }
-    #dateContainer input[type="date"], #dateContainer select { padding: 0.4rem; border-radius: 4px; border: 1px solid #cbd5e1; font-family: inherit; }
-    
-    #resultadosContenedor { width: 100%; max-width: 1000px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1.5rem; max-height: 700px; overflow-y: auto; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); box-sizing: border-box;}
-    
-    .resultado { border-left: 5px solid #ccc; border-radius: 4px; padding: 1rem; margin-bottom: 1rem; background: #f8fafc; border-top: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; }
-    
-    .badge { display: inline-block; padding: 0.3rem 0.6rem; border-radius: 4px; color: #fff; font-size: 0.85rem; font-weight: bold; margin-bottom: 0.5rem; }
-    
-    .pdf-viewer { width: 100%; max-width: 1000px; height: 800px; border: none; border-radius: 8px; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 2rem; }
-    
-    .progress-container { width: 100%; max-width: 1000px; background: #e2e8f0; border-radius: 8px; margin-top: 1rem; overflow: hidden; height: 24px; position: relative; }
-    .progress-bar { height: 100%; background: #22c55e; width: 0%; transition: width 0.1s linear; }
-    .progress-text { position: absolute; width: 100%; text-align: center; top: 0; left: 0; line-height: 24px; font-size: 0.9rem; color: #000; font-weight: bold; }
-    #searchStats { text-align: center; font-size: 0.85rem; color: #64748b; margin-top: 0.5rem; display: none; }
-    
-    .btn { padding: 0.75rem 1.5rem; border: none; border-radius: 6px; cursor: pointer; font-family: inherit; font-weight: bold; font-size: 1rem; transition: background 0.2s; }
-    .btn-primary { background: #2563eb; color: #fff; }
-    .btn-primary:hover { background: #1d4ed8; }
-    .btn-secondary { background: #475569; color: #fff; padding: 0.5rem 1rem; font-size: 0.9rem; }
-    .btn-secondary:hover { background: #334155; }
-    
-    #indiceDescargas { width: 100%; max-width: 1000px; margin-top: 2rem; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); box-sizing: border-box; }
-    .grid-descargas { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
-    .link-descarga { text-decoration: none; font-size: 0.85rem; padding: 0.4rem 0.6rem; border-radius: 4px; color: #fff; font-weight: bold; display: inline-block; transition: filter 0.2s; }
-    .link-descarga:hover { filter: brightness(1.1); }
-    
-    mark { background-color: #fef08a; padding: 0.1rem 0.2rem; border-radius: 2px; font-weight: bold; }
+    .btn-primary { background-color: #0056b3; color: white; border: none; padding: 0.5rem 1rem; font-size: 1rem; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-secondary { background-color: #2c3e50; color: white; border: none; padding: 0.5rem 1rem; font-size: 1rem; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    .btn-primary:hover { background-color: #004085; }
+    .btn-secondary:hover { background-color: #1a252f; }
   </style>
-
-  <script type="javascript/worker" id="searchWorkerCode">
-    // CACHÉ LRU EN MEMORIA DEL WORKER
-    const chunkCache = new Map();
-    const MAX_CACHE_FILES = 120; // Ajustable según uso de memoria
-    const CONCURRENCY_LIMIT = 8;
-    
-    let currentSearchId = 0;
-
-    function normalizarFecha(str) {
-        if (!str) return "";
-        const m = str.match(/(19[89]\\d|20[0123]\\d)[_\\-]?([01]\\d)[_\\-]?([0123]\\d)/);
-        if (m) return \`\${m[1]}-\${m[2]}-\${m[3]}\`;
-        return "";
-    }
-
-    self.onmessage = async function(e) {
-        const msg = e.data;
-        if (msg.type === 'START_SEARCH') {
-            currentSearchId++;
-            await procesarBusqueda(msg.payload, currentSearchId);
-        } else if (msg.type === 'CANCEL_SEARCH') {
-            currentSearchId++; // Al cambiar el ID, los workers activos abortan limpiamente
-        }
-    };
-
-    async function procesarBusqueda(payload, searchId) {
-        const { queue, term, searchMode, fromDate, toDate } = payload;
-        
-        // 1. Precompilar Regex una única vez
-        let pattern = term;
-        try {
-            if (searchMode === 'contiene') {
-                pattern = term.replace(/[.*+?^\\${}()|[\\]\\\\]/g, '\\\\$&');
-            } else if (searchMode === 'termina') {
-                pattern = term.replace(/[.*+?^\\${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\b';
-            } else if (searchMode === 'alguna') {
-                pattern = term.trim().split(/\\s+/).map(t => t.replace(/[.*+?^\\${}()|[\\]\\\\]/g, '\\\\$&')).join('|');
-            }
-        } catch(e) {
-            self.postMessage({ type: 'ERROR', message: 'Regex inválida', searchId });
-            return;
-        }
-        
-        const mainRx = new RegExp(pattern, 'i');
-        const totalTasks = queue.length;
-        
-        let completedTasks = 0;
-        let currentTaskIndex = 0; // Índice incremental, jamás un shift()
-        let lastRenderedProgress = -1;
-        let chunksProcessedCount = 0;
-
-        function reportProgress() {
-            if (searchId !== currentSearchId) return;
-            const pct = Math.floor((completedTasks / totalTasks) * 100);
-            if (pct !== lastRenderedProgress) {
-                lastRenderedProgress = pct;
-                self.postMessage({ type: 'PROGRESS', progress: pct, searchId });
-            }
-        }
-
-        async function threadWorker() {
-            while (currentTaskIndex < totalTasks) {
-                if (searchId !== currentSearchId) return; // Abortar si hay nueva búsqueda
-                
-                const task = queue[currentTaskIndex++];
-                let chunkData = chunkCache.get(task.filename);
-                
-                // 2. Gestión de Red y Caché LRU
-                if (!chunkData) {
-                    try {
-                        const response = await fetch(task.url);
-                        if (response.ok) {
-                            const rawText = await response.text();
-                            const lines = rawText.split('\\n');
-                            chunkData = [];
-                            
-                            // Parseo y Normalización únicos
-                            for (let i = 0; i < lines.length; i++) {
-                                const line = lines[i];
-                                if (!line) continue;
-                                const obj = JSON.parse(line);
-                                obj._cat = task.cat;
-                                obj._date = normalizarFecha(obj.fecha || obj.archivo);
-                                chunkData.push(obj);
-                            }
-                            
-                            // LRU Policy
-                            if (chunkCache.size >= MAX_CACHE_FILES) {
-                                const oldestKey = chunkCache.keys().next().value;
-                                chunkCache.delete(oldestKey);
-                            }
-                            chunkCache.set(task.filename, chunkData);
-                        } else {
-                            chunkData = [];
-                        }
-                    } catch (e) {
-                        chunkData = [];
-                    }
-                } else {
-                    // Refrescar LRU (hacerlo el más reciente)
-                    chunkCache.delete(task.filename);
-                    chunkCache.set(task.filename, chunkData);
-                }
-
-                if (searchId !== currentSearchId) return;
-                chunksProcessedCount++;
-
-                // 3. Filtrado de Alto Rendimiento (1 sola pasada)
-                const localMatches = [];
-                const len = chunkData.length;
-                for (let i = 0; i < len; i++) {
-                    const item = chunkData[i];
-                    if (fromDate && item._date && item._date < fromDate) continue;
-                    if (toDate && item._date && item._date > toDate) continue;
-                    
-                    if (mainRx.test(item.fragmento) || mainRx.test(item.archivo)) {
-                        localMatches.push(item);
-                    }
-                }
-
-                // 4. Emisión de resultados progresivos inmediatos
-                if (localMatches.length > 0 && searchId === currentSearchId) {
-                    self.postMessage({ type: 'RESULTS', matches: localMatches, searchId });
-                }
-
-                completedTasks++;
-                reportProgress();
-            }
-        }
-
-        // 5. Instanciar el Pool de Concurrencia Pura
-        const pool = [];
-        for (let i = 0; i < CONCURRENCY_LIMIT; i++) {
-            pool.push(threadWorker());
-        }
-
-        await Promise.all(pool);
-
-        if (searchId === currentSearchId) {
-            self.postMessage({ type: 'DONE', chunksProcessed: chunksProcessedCount, searchId });
-        }
-    }
-  </script>
 </head>
 <body>
 
-  <div id="headerContainer">
-    <h1>Buscador Integrado Municipal</h1>
-    <p>Búsqueda profunda en resoluciones, licitaciones y actas taquigráficas.</p>
-  </div>
-
   <div id="ultimaActualizacion">
-    <h3>Última Actualización</h3>
-    <div id="indicadoresActualizacion">Sincronizando índices...</div>
+    <div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.8rem; font-size:0.9rem; background:#fff; padding:0.8rem; border-radius:6px; border:1px solid #ccc; justify-content:center;">
+      <span style="font-weight:bold; margin-right: 0.2rem;">Actualizado hasta:</span> Sincronizando...
+    </div>
   </div>
 
-  <div class="panel">
-    <div id="searchContainer">
-      <input type="text" id="searchInput" placeholder="Ingrese términos de búsqueda...">
-      <button class="btn btn-primary" onclick="iniciarBusquedaUI()">Buscar</button>
+  <div id="seccionDescargas" style="width: 100%; max-width: 900px; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin: 0.5rem 0 1rem 0; box-sizing: border-box;">
+    <h4 style="margin: 0 0 0.4rem 0; display:flex; align-items:center; gap:0.5rem;">📅 Índice de Archivos y Descargas Directas</h4>
+    
+    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.8rem;">
+      <label>Filtrar Año: <select id="descFiltroAnno"><option value="TODOS">Todos los años</option></select></label>
+      <label><input type="checkbox" id="descDesagregarMensual"> Desagregar meses</label>
+      <span id="descCargandoStatus" style="font-size:0.85rem; color:#666; font-style:italic;">Leyendo índice unificado…</span>
+    </div>
+    
+    <div id="descContenedorEnlaces" style="max-height: 200px; overflow-y: auto; padding: 0.5rem; border: 1px dashed #ccc; border-radius: 4px; background: #fafafa; display: flex; flex-direction: column; gap: 0.6rem;">
+      <span style="color:#888; font-size:0.85rem; font-style:italic; text-align:center;">Construyendo grilla de descargas…</span>
+    </div>
+  </div>
+
+  <div id="searchContainer">
+    <div id="categoryOptions">
+      <label><input type="checkbox" id="cat-boletines" value="boletines" checked> Boletines Oficiales</label>
+      <label><input type="checkbox" id="cat-licitaciones" value="licitaciones"> Licitaciones Públicas</label>
+      <label><input type="checkbox" id="cat-hcd-orden" value="hcd_orden"> HCD: Órdenes del Día</label>
+      <label><input type="checkbox" id="cat-hcd-taqui" value="hcd_taqui"> HCD: Taquigráficas</label>
     </div>
 
     <div id="searchOptions">
-      <label class="opcion-label"><input type="radio" name="searchMode" value="contiene" checked> Contiene</label>
-      <label class="opcion-label"><input type="radio" name="searchMode" value="termina"> Termina en</label>
-      <label class="opcion-label"><input type="radio" name="searchMode" value="alguna"> Alguna palabra</label>
-      <label class="opcion-label"><input type="radio" name="searchMode" value="regex"> Regex</label>
+      <label><input type="radio" name="searchType" value="contains" checked> Contiene</label>
+      <label><input type="radio" name="searchType" value="endsWith"> Termina en</label>
+      <label><input type="radio" name="searchType" value="or"> Alguna palabra</label>
     </div>
-    
-    <div id="dateContainer">
-      <label class="opcion-label">Desde: <input type="date" id="fechaDesde"></label>
-      <label class="opcion-label">Hasta: <input type="date" id="fechaHasta"></label>
-      <label class="opcion-label">Orden: 
-        <select id="ordenResultados">
-          <option value="desc">Más recientes primero</option>
-          <option value="asc">Más antiguos primero</option>
-        </select>
-      </label>
-    </div>
-
-    <div id="categoryOptions">
-      <label class="opcion-label"><input type="checkbox" value="boletines" checked> Boletines</label>
-      <label class="opcion-label"><input type="checkbox" value="licitaciones" checked> Licitaciones</label>
-      <label class="opcion-label"><input type="checkbox" value="hcd_orden" checked> HCD Orden</label>
-      <label class="opcion-label"><input type="checkbox" value="hcd_taqui" checked> HCD Taquigráficas</label>
-    </div>
-    
-    <div class="progress-container" id="progresoBusqueda" style="display: none;">
-      <div class="progress-bar" id="progressBar"></div>
-      <div class="progress-text" id="progressText">0%</div>
-    </div>
-    <div id="searchStats"></div>
+    <input id="busqueda" placeholder="Escribí una palabra y presioná Enter para búsqueda profunda..." style="width:100%;padding:.5rem;font-size:1rem" />
   </div>
 
-  <div id="resultadosContenedor">
-    <div id="resultadosDinamicos">
-        <p style="text-align:center; color:#666;">Los resultados de la búsqueda profunda aparecerán aquí.</p>
-    </div>
+  <div id="dateContainer" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; justify-content: center; margin-bottom: 1.5rem;">
+    <label>Desde: <input type="month" id="desde" /></label>
+    <label>Hasta: <input type="month" id="hasta" /></label>
+    <select id="orden">
+      <option value="desc">Más nuevos primero</option>
+      <option value="asc">Más antiguos primero</option>
+    </select>
+  </div>
+  
+  <div style="width: 100%; text-align: center; margin-bottom: 1.5rem;">
+    <button id="botonBuscarChunks" class="btn-secondary" style="padding: 0.6rem 2rem; font-size: 1.1rem;">🔍 Buscar</button>
   </div>
 
-  <iframe id="pdfViewer" class="pdf-viewer" style="display: none;"></iframe>
-
-  <div id="indiceDescargas">
-    <h3>📅 Índice de Archivos y Descargas Directas</h3>
-    <div style="margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-      <label class="opcion-label">Filtrar Año: <select id="descFiltroAnno"><option value="all">Todos los años</option></select></label>
-      <label class="opcion-label"><input type="checkbox" id="descDesagregarMensual"> Desagregar meses</label>
-    </div>
-    <div id="contenedorIndiceDescargas" class="grid-descargas"></div>
+  <div id="progressContainer" style="width: 100%; max-width: 900px; background: #e2e8f0; border-radius: 20px; height: 24px; position: relative; overflow: hidden; margin: 1rem 0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); display: none;">
+    <div id="progressBar" style="width: 0%; height: 100%; background: #3b82f6; transition: width 0.2s ease; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.9rem;"></div>
   </div>
+
+  <div id="status"></div>
+  <div id="contador"></div>
+  <div id="resultados"></div>
+  <div id="pdfPreview"></div>
+  <div id="version">V1.3.2 Asíncrona Fix Total</div>
 
 <script>
-/**
- * HILO PRINCIPAL - EXCLUSIVO PARA RENDERIZADO Y ESTADO DE UI
- */
+  const ultimaDiv = document.getElementById('ultimaActualizacion');
+  const busquedaInput = document.getElementById('busqueda');
+  const botonBuscarChunks = document.getElementById('botonBuscarChunks');
+  const resultadosDiv = document.getElementById('resultados');
+  const pdfPreview = document.getElementById('pdfPreview');
+  const statusDiv = document.getElementById('status');
+  const contadorDiv = document.getElementById('contador');
+  
+  const progressContainer = document.getElementById('progressContainer');
+  const progressBar = document.getElementById('progressBar');
+  
+  const desdeInput = document.getElementById('desde');
+  const hastaInput = document.getElementById('hasta');
+  const ordenSelect = document.getElementById('orden');
+  
+  const descFiltroAnno = document.getElementById('descFiltroAnno');
+  const descDesagregarMensual = document.getElementById('descDesagregarMensual');
+  const descCargandoStatus = document.getElementById('descCargandoStatus');
+  const descContenedorEnlaces = document.getElementById('descContenedorEnlaces');
 
-const CONFIG_CATEGORIAS = {
-    'boletines': { label: 'Boletines', colorHex: '#3b82f6', dir: 'json_chunks/bolet', prefix: 'bolet_part_', digits: 4 },
-    'licitaciones': { label: 'Licitaciones', colorHex: '#f97316', dir: 'json_chunks/lici', prefix: 'lici_part', digits: 4 },
-    'hcd_orden': { label: 'HCD Orden', colorHex: '#22c55e', dir: 'json_chunks/orden', prefix: 'hcd_orden_part', digits: 4 },
-    'hcd_taqui': { label: 'HCD Taqui', colorHex: '#a855f7', dir: 'json_chunks/taqui', prefix: 'taqui_part', digits: 4 }
-};
+  let baseDocumentosIndexados = []; 
+  let documentosUnicosParaDescarga = [];
+  
+  let chunkCache = null;
 
-let manifest = null;
-let baseDocumentosCSV = [];
+  const CONFIG_CATEGORIAS = {
+    boletines: { label: 'Boletín', badgeClass: 'badge-boletin', resultClass: '', colorHex: '#0000ff', chunkFolder: 'bolet', prefix: 'bolet_part_', startDigit: 1 },
+    licitaciones: { label: 'Licitación', badgeClass: 'badge-lici', resultClass: 'licitacion', colorHex: '#e67e22', chunkFolder: 'lici', prefix: 'lici_part', startDigit: 0 },
+    hcd_orden: { label: 'HCD Orden', badgeClass: 'badge-orden', resultClass: 'hcd_orden', colorHex: '#2ecc71', chunkFolder: 'orden', prefix: 'hcd_orden_part', startDigit: 1 },
+    hcd_taqui: { label: 'HCD Taquigráfica', badgeClass: 'badge-taqui', resultClass: 'hcd_taqui', colorHex: '#9b59b6', chunkFolder: 'taqui', prefix: 'taqui_part', startDigit: 1 }
+  };
 
-// ==========================================
-// INICIALIZACIÓN
-// ==========================================
-document.addEventListener('DOMContentLoaded', init);
-
-async function init() {
-    try {
-        const resManifest = await fetch('manifest.json');
-        manifest = resManifest.ok ? await resManifest.json() : { "boletines": 143, "licitaciones": 38, "hcd_orden": 19, "hcd_taqui": 25 };
-    } catch(e) { manifest = { "boletines": 143, "licitaciones": 38, "hcd_orden": 19, "hcd_taqui": 25 }; }
-
-    try {
-        const resCSV = await fetch('indice_documentos.csv');
-        if (resCSV.ok) {
-            const textCSV = await resCSV.text();
-            baseDocumentosCSV = parsearCSV(textCSV);
-            procesarFechasCSV();
-            renderizarUltimaActualizacion();
-            renderizarSelectorAnios();
-            renderizarEnlacesIndice();
-        } else {
-            document.getElementById('indicadoresActualizacion').innerHTML = '<em>No se pudo cargar el índice.</em>';
-        }
-    } catch(e) { console.error("Error CSV:", e); }
-
-    document.getElementById('descFiltroAnno').addEventListener('change', renderizarEnlacesIndice);
-    document.getElementById('descDesagregarMensual').addEventListener('change', renderizarEnlacesIndice);
-    document.getElementById('searchInput').addEventListener('keypress', e => { if (e.key === 'Enter') iniciarBusquedaUI(); });
-}
-
-// ==========================================
-// CSV & UI ESTÁTICA
-// ==========================================
-function normalizarFechaFront(str) {
-    if (!str) return "";
-    const m = str.match(/(19[89]\d|20[0123]\d)[_\-]?([01]\d)[_\-]?([0123]\d)/);
-    return m ? `${m[1]}-${m[2]}-${m[3]}` : "";
-}
-
-function formatearFechaLatina(isoStr) {
-    if (!isoStr || isoStr.length !== 10) return isoStr;
-    const [y, m, d] = isoStr.split('-');
-    return `${d}/${m}/${y}`;
-}
-
-function parsearCSV(texto) {
-    const lineas = texto.split('\n');
-    const resultado = [];
-    if (lineas.length === 0) return resultado;
+  function parsearCSV(text) {
+    const lines = text.split(/\r?\n/);
+    if (lines.length === 0) return [];
     
-    const headers = lineas[0].split(',').map(h => h.trim().toLowerCase());
-    for (let i = 1; i < lineas.length; i++) {
-        const linea = lineas[i];
-        if (!linea.trim()) continue;
-        const obj = {};
-        let start = 0, inQuotes = false, col = 0;
-        for (let j = 0; j < linea.length; j++) {
-            if (linea[j] === '"') inQuotes = !inQuotes;
-            else if (linea[j] === ',' && !inQuotes) {
-                obj[headers[col]] = linea.substring(start, j).replace(/^"|"$/g, '').trim();
-                col++; start = j + 1;
-            }
-        }
-        obj[headers[col]] = linea.substring(start).replace(/^"|"$/g, '').trim();
-        resultado.push(obj);
-    }
-    return resultado;
-}
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
+    const rows = [];
 
-function procesarFechasCSV() {
-    baseDocumentosCSV.forEach(doc => {
-        doc._date = normalizarFechaFront(doc.fecha || doc.archivo || "");
-        let catStr = (doc.categoria || "").toLowerCase();
-        if (catStr.includes('bolet')) doc._catKey = 'boletines';
-        else if (catStr.includes('lici')) doc._catKey = 'licitaciones';
-        else if (catStr.includes('orden')) doc._catKey = 'hcd_orden';
-        else if (catStr.includes('taqui')) doc._catKey = 'hcd_taqui';
-    });
-}
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
 
-function renderizarUltimaActualizacion() {
-    const recientes = {};
-    baseDocumentosCSV.forEach(doc => {
-        if (!doc._catKey || !doc._date) return;
-        if (!recientes[doc._catKey] || doc._date > recientes[doc._catKey]._date) recientes[doc._catKey] = doc;
-    });
+      let arr = [];
+      let insideQuote = false;
+      let entry = '';
 
-    const cont = document.getElementById('indicadoresActualizacion');
-    cont.innerHTML = '';
-    const wrapper = document.createElement('div');
-    wrapper.style.display = 'grid'; wrapper.style.gridTemplateColumns = 'repeat(auto-fit, minmax(200px, 1fr))'; wrapper.style.gap = '1rem';
-    
-    Object.keys(CONFIG_CATEGORIAS).forEach(cat => {
-        const doc = recientes[cat], conf = CONFIG_CATEGORIAS[cat];
-        const item = document.createElement('div');
-        if (doc) {
-            const extra = doc.info ? `<br><small style="color:#666">${doc.info}</small>` : '';
-            item.innerHTML = `<strong>${conf.label}:</strong><br>${doc.codigo || doc.archivo} (${formatearFechaLatina(doc._date)})${extra}`;
-        } else {
-            item.innerHTML = `<strong>${conf.label}:</strong><br><span style="color:#999">Sin datos</span>`;
-        }
-        wrapper.appendChild(item);
-    });
-    cont.appendChild(wrapper);
-}
+      for (let j = 0; j < line.length; j++) {
+        let char = line[j];
+        if (char === '"') insideQuote = !insideQuote;
+        else if (char === ',' && !insideQuote) { arr.push(entry.trim()); entry = ''; }
+        else entry += char;
+      }
+      arr.push(entry.trim());
 
-function renderizarSelectorAnios() {
-    const anios = new Set();
-    baseDocumentosCSV.forEach(d => { if (d._date) anios.add(d._date.substring(0, 4)); });
-    const select = document.getElementById('descFiltroAnno');
-    Array.from(anios).sort().reverse().forEach(anio => {
-        const opt = document.createElement('option'); opt.value = anio; opt.textContent = anio;
-        select.appendChild(opt);
-    });
-}
-
-function renderizarEnlacesIndice() {
-    const contenedor = document.getElementById('contenedorIndiceDescargas');
-    contenedor.innerHTML = '';
-    const filtroAnio = document.getElementById('descFiltroAnno').value;
-    
-    const filtrados = baseDocumentosCSV.filter(doc => doc._catKey && (filtroAnio === 'all' || (doc._date && doc._date.startsWith(filtroAnio))));
-    filtrados.sort((a,b) => (b._date || "").localeCompare(a._date || ""));
-
-    filtrados.forEach(doc => {
-        const conf = CONFIG_CATEGORIAS[doc._catKey];
-        const link = document.createElement('a');
-        link.className = 'link-descarga'; link.href = doc.url; link.target = '_blank';
-        link.style.backgroundColor = conf.colorHex; link.title = doc.info || doc.archivo;
-        link.textContent = `${conf.label} ${doc.codigo || doc.archivo.substring(0,12)}`;
-        contenedor.appendChild(link);
-    });
-}
-
-// ==========================================
-// COMUNICACIÓN CON WORKER Y RENDERIZADO PROGRESIVO
-// ==========================================
-
-// Creación única del Web Worker mediante Blob
-const workerBlob = new Blob([document.getElementById('searchWorkerCode').textContent], { type: 'text/javascript' });
-const searchWorker = new Worker(URL.createObjectURL(workerBlob));
-
-let activeSearchId = 0;
-let currentHighlightRx = null;
-let currentSortOrder = 'desc';
-let renderedElementsMap = []; // Array de referencias para ordenación binaria
-let startTime = 0;
-
-function compilarHighlightRx(term, mode) {
-    let pattern = term;
-    if (mode === 'contiene') pattern = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    else if (mode === 'termina') pattern = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b';
-    else if (mode === 'alguna') pattern = term.trim().split(/\s+/).map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-    return new RegExp(`(${pattern})`, 'gi');
-}
-
-function getInsertIndex(arr, dateVal, order) {
-    let l = 0, r = arr.length - 1;
-    const d1 = dateVal || "";
-    while (l <= r) {
-        const m = l + ((r - l) >> 1);
-        const d2 = arr[m].date || "";
-        let cmp = d1.localeCompare(d2);
-        if (order === 'desc') cmp = -cmp;
-        
-        if (cmp < 0) r = m - 1;
-        else l = m + 1;
-    }
-    return l;
-}
-
-function crearNodoResultado(item) {
-    const conf = CONFIG_CATEGORIAS[item._cat];
-    const row = document.createElement('div');
-    row.className = `resultado`;
-    row.style.borderLeftColor = conf.colorHex;
-    
-    let hlTxt = item.fragmento || "";
-    if (currentHighlightRx && hlTxt) {
-        hlTxt = hlTxt.replace(currentHighlightRx, '<mark>$1</mark>');
-    }
-
-    row.innerHTML = `
-        <span class="badge" style="background-color: ${conf.colorHex}">${conf.label}</span>
-        <h4 style="margin: 0.5rem 0;">${item.archivo}</h4>
-        <div style="font-size: 0.85rem; color: #64748b;">Fecha: ${formatearFechaLatina(item._date) || 'S/D'} | Página: ${item.pagina || '1'}</div>
-        <p style="font-size: 0.95rem; margin-top: 0.75rem; color: #1e293b;">${hlTxt}</p>
-        <div style="margin-top: 1rem; display: flex; gap: 1rem;">
-            <button class="btn btn-secondary" onclick="invocarVisorPdf('${item.url}', '${item.pagina || ''}')">Ver PDF</button>
-            <a class="btn btn-primary" style="text-decoration: none;" href="${item.url}" target="_blank">Descargar</a>
-        </div>
-    `;
-    return row;
-}
-
-searchWorker.onmessage = function(e) {
-    const msg = e.data;
-    if (msg.searchId && msg.searchId !== activeSearchId) return;
-
-    if (msg.type === 'PROGRESS') {
-        document.getElementById('progressBar').style.width = msg.progress + '%';
-        document.getElementById('progressText').innerText = msg.progress + '%';
-    } 
-    else if (msg.type === 'RESULTS') {
-        const frag = document.createDocumentFragment();
-        const container = document.getElementById('resultadosDinamicos');
-        
-        // Limpiar mensaje placeholder en el primer resultado
-        if (renderedElementsMap.length === 0) container.innerHTML = '';
-
-        // Inserción progresiva manteniendo ordenamiento puro vía Búsqueda Binaria
-        msg.matches.forEach(item => {
-            const el = crearNodoResultado(item);
-            const idx = getInsertIndex(renderedElementsMap, item._date, currentSortOrder);
-            renderedElementsMap.splice(idx, 0, { date: item._date, el: el });
-            
-            if (idx === renderedElementsMap.length - 1) {
-                frag.appendChild(el); // Va al final
-            } else {
-                const refNode = renderedElementsMap[idx + 1].el;
-                if (refNode.parentNode) {
-                    refNode.parentNode.insertBefore(el, refNode);
-                } else {
-                    frag.insertBefore(el, frag.childNodes[0] || null);
-                }
-            }
+      if (arr.length >= headers.length) {
+        let obj = {};
+        headers.forEach((h, index) => {
+          let val = arr[index] ? arr[index].replace(/^"|"$/g, '') : '';
+          obj[h] = val;
         });
         
-        if (frag.childNodes.length > 0) container.appendChild(frag);
-    } 
-    else if (msg.type === 'DONE') {
-        const timeTaken = performance.now() - startTime;
-        const stats = document.getElementById('searchStats');
-        stats.style.display = 'block';
-        stats.innerHTML = `Búsqueda finalizada en <strong>${Math.round(timeTaken)} ms</strong>. 
-                           Chunks procesados: <strong>${msg.chunksProcessed}</strong>. 
-                           Total de hallazgos: <strong>${renderedElementsMap.length}</strong>.`;
+        obj.categoria = obj.categoria || arr[0] || '';
+        let catLow = obj.categoria.toLowerCase();
+        if (catLow.includes('bolet')) obj.categoria = 'boletines';
+        else if (catLow.includes('lici')) obj.categoria = 'licitaciones';
+        else if (catLow.includes('orden')) obj.categoria = 'hcd_orden';
+        else if (catLow.includes('taqui')) obj.categoria = 'hcd_taqui';
+
+        obj.archivo = obj.archivo || arr[1];
+        obj.url = obj.url || arr[2];
+        obj.fecha = obj.fecha || arr[3];
+        obj.extra_info = obj.extra_info || arr[4];
+        obj.pagina = obj.pagina || arr[5] || '1';
         
-        if (renderedElementsMap.length === 0) {
-            document.getElementById('resultadosDinamicos').innerHTML = '<p style="text-align:center; font-weight:bold; color:#475569;">No se encontraron coincidencias.</p>';
+        rows.push(obj);
+      }
+    }
+    return rows;
+  }
+
+  function obtenerDatosFecha(obj) {
+    let rawFecha = obj.fecha ? obj.fecha.replace(/[^\d-]/g, '') : '';
+    
+    let matchStandard = rawFecha.match(/^(19[89]\d|20[0123]\d)[-]?([01]\d)[-]?([0-3]\d)$/);
+    if (matchStandard) {
+      return {
+        sortable: matchStandard[1] + matchStandard[2] + matchStandard[3],
+        display: `${matchStandard[3]}/${matchStandard[2]}/${matchStandard[1]}`,
+        year: matchStandard[1], month: matchStandard[2]
+      };
+    }
+
+    let textoTarget = (obj.archivo || '') + ' ' + (obj.extra_info || '');
+    let matchYear = textoTarget.match(/\b(19[89]\d|20[0123]\d)\b/);
+    if (matchYear) {
+      return {
+        sortable: matchYear[1] + "0101",
+        display: `Año ${matchYear[1]}`,
+        year: matchYear[1], month: "01"
+      };
+    }
+
+    return { sortable: "19000101", display: "S/F", year: "N/D", month: "01" };
+  }
+
+  function normalizarFechaChunk(obj) {
+    if (obj.fecha) return obj.fecha.replace(/[^\d]/g, '').slice(0, 8);
+    if (obj.fecha_acta) return obj.fecha_acta.replace(/[^\d]/g, '').slice(0, 8);
+    
+    let nombre = obj.archivo || '';
+    let match = nombre.match(/^(\d{8})/);
+    if (match) return match[1];
+    
+    return "19000101";
+  }
+
+  function extraerCodigoLimpio(obj) {
+    if (obj.categoria === 'boletines') {
+      const m = (obj.url || obj.archivo || '').match(/boletin[-_](\d+)/i);
+      if (m) return m[1];
+    } else if (obj.categoria === 'licitaciones') {
+      const m = (obj.url || '').match(/\/([^\/]+)\.pdf$/i);
+      if (m) return m[1];
+      const m2 = (obj.archivo || '').match(/LiciPubli_([0-9-]+)_/i);
+      if (m2) return m2[1];
+    } else {
+      const m = (obj.url || '').match(/\/([^\/]+)\.pdf$/i);
+      if (m) return m[1];
+      const m2 = (obj.archivo || '').match(/_part([0-9]+)/i);
+      if (m2) return m2[1];
+    }
+    return 'S/N';
+  }
+
+  function autocompletarFechas() {
+    let minSortable = '99999999';
+    let maxSortable = '00000000';
+    
+    baseDocumentosIndexados.forEach(obj => {
+      const s = obj.datosFecha.sortable;
+      if (s !== '19000101' && s.length === 8) {
+        if (s < minSortable) minSortable = s;
+        if (s > maxSortable) maxSortable = s;
+      }
+    });
+    
+    if (minSortable !== '99999999') {
+      desdeInput.value = `${minSortable.slice(0,4)}-${minSortable.slice(4,6)}`;
+    }
+    
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    hastaInput.value = `${yyyy}-${mm}`;
+  }
+
+  async function cargarBaseDeDatosCSV() {
+    try {
+      const respuesta = await fetch('indice_documentos.csv');
+      if (!respuesta.ok) throw new Error("No se encontró el índice CSV.");
+      
+      const textoCSV = await respuesta.text();
+      
+      baseDocumentosIndexados = parsearCSV(textoCSV);
+      baseDocumentosIndexados.forEach(obj => { obj.datosFecha = obtenerDatosFecha(obj); });
+      
+      descCargandoStatus.textContent = ""; 
+      
+      autocompletarFechas(); 
+      procesarMetadatosYDescargas();
+      mostrarUltimaActualizacion();
+    } catch (err) {
+      console.error(err);
+      descCargandoStatus.textContent = "❌ Error cargando CSV";
+      ultimaDiv.innerHTML = "Error al inicializar la base de datos remota.";
+    }
+  }
+
+  function mostrarUltimaActualizacion() {
+    ultimaDiv.innerHTML = '<div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.8rem; font-size:0.9rem; background:#fff; padding:0.8rem; border-radius:6px; border:1px solid #ccc; justify-content:center;">' +
+                          '<span style="font-weight:bold; margin-right: 0.2rem;">Actualizado hasta:</span></div>';
+    const container = ultimaDiv.firstChild;
+
+    Object.keys(CONFIG_CATEGORIAS).forEach(key => {
+        const conf = CONFIG_CATEGORIAS[key];
+        const subGrupo = baseDocumentosIndexados.filter(d => d.categoria === key);
+        
+        if (subGrupo.length === 0) {
+            container.innerHTML += `<span style="border-left: 4px solid #ccc; padding-left:5px; color:#666;"><strong>${conf.label}:</strong> Sin datos</span>`;
+            return;
         }
-    }
-    else if (msg.type === 'ERROR') {
-        document.getElementById('resultadosDinamicos').innerHTML = `<p style="color:red; text-align:center;">Error: ${msg.message}</p>`;
-    }
-};
 
-function iniciarBusquedaUI() {
-    const term = document.getElementById('searchInput').value.trim();
-    if (!term) return;
+        // Ordenamos estrictamente de forma cronológica descendente usando sortable
+        subGrupo.sort((a, b) => b.datosFecha.sortable.localeCompare(a.datosFecha.sortable));
 
-    // 1. Cancelación de búsqueda previa instantánea
-    activeSearchId++;
-    searchWorker.postMessage({ type: 'CANCEL_SEARCH' });
-
-    // 2. Reseteo de Interfaz
-    document.getElementById('pdfViewer').style.display = 'none';
-    const contBarra = document.getElementById('progresoBusqueda');
-    contBarra.style.display = 'block';
-    document.getElementById('progressBar').style.width = '0%';
-    document.getElementById('progressText').innerText = '0%';
-    document.getElementById('searchStats').style.display = 'none';
-    
-    document.getElementById('resultadosDinamicos').innerHTML = '';
-    renderedElementsMap = [];
-    startTime = performance.now();
-
-    // 3. Preparación de variables
-    const searchMode = document.querySelector('input[name="searchMode"]:checked').value;
-    currentSortOrder = document.getElementById('ordenResultados').value;
-    currentHighlightRx = compilarHighlightRx(term, searchMode);
-    
-    const fromDate = document.getElementById('fechaDesde').value;
-    const toDate = document.getElementById('fechaHasta').value;
-    
-    const selectedCats = Array.from(document.querySelectorAll('#categoryOptions input[type="checkbox"]:checked')).map(c => c.value);
-
-    // 4. Armado de la Cola de Tareas por Manifest
-    const queue = [];
-    selectedCats.forEach(cat => {
-        const conf = CONFIG_CATEGORIAS[cat];
-        const total = manifest[cat] || 0;
-        for (let i = 1; i <= total; i++) {
-            const numStr = i.toString().padStart(conf.digits, '0');
-            queue.push({ cat, filename: `${conf.prefix}${numStr}`, url: `${conf.dir}/${conf.prefix}${numStr}.jsonl` });
+        const ultimo = subGrupo[0];
+        const idDoc = extraerCodigoLimpio(ultimo);
+        const fechaDisplay = ultimo.datosFecha.display !== 'S/F' ? `${ultimo.datosFecha.display}` : 'Sin Fecha';
+        
+        if (key === 'hcd_orden') {
+            container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Orden del día:</strong> Sesión ${fechaDisplay}</span>`;
+        } else if (key === 'hcd_taqui') {
+            container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>HCD Taquigráfica:</strong> Sesión ${fechaDisplay}</span>`;
+        } else {
+            const fechaParentesis = ultimo.datosFecha.display !== 'S/F' ? ` (${ultimo.datosFecha.display})` : '';
+            container.innerHTML += `<span style="border-left: 4px solid ${conf.colorHex}; padding-left:5px;"><strong>${conf.label}:</strong> N.º ${idDoc}${fechaParentesis}</span>`;
         }
     });
+  }
 
-    if (queue.length === 0) {
-        document.getElementById('resultadosDinamicos').innerHTML = '<p style="text-align:center;">No hay categorías seleccionadas.</p>';
-        return;
+  function cargarPDF(urlCompleta) {
+    pdfPreview.innerHTML = '<p>Cargando visor de PDF…</p>';
+    const iframe = document.createElement('iframe');
+    iframe.src = urlCompleta;
+    pdfPreview.innerHTML = '';
+    pdfPreview.appendChild(iframe);
+  }
+
+  async function descargarTodoElCacheChunks() {
+    if (!chunkCache) {
+      chunkCache = [];
+    }
+    
+    const categoriasActivas = [];
+    if(document.getElementById('cat-boletines').checked) categoriasActivas.push('boletines');
+    if(document.getElementById('cat-licitaciones').checked) categoriasActivas.push('licitaciones');
+    if(document.getElementById('cat-hcd-orden').checked) categoriasActivas.push('hcd_orden');
+    if(document.getElementById('cat-hcd-taqui').checked) categoriasActivas.push('hcd_taqui');
+
+    const categoriasPorDescargar = categoriasActivas.filter(cat => {
+      return !chunkCache.some(obj => obj._categoriaInterna === cat);
+    });
+
+    if (categoriasPorDescargar.length === 0) {
+      return;
     }
 
-    // 5. Envío al Worker Aislado
-    searchWorker.postMessage({
-        type: 'START_SEARCH',
-        payload: { queue, term, searchMode, fromDate, toDate }
-    });
-}
+    statusDiv.textContent = 'Fase 1/2: Descargando índices de texto profundo...';
+    progressContainer.style.display = 'block';
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+    
+    let totalCategorias = categoriasPorDescargar.length;
+    let archivosDescargadosContador = 0;
+    
+    for (let i = 0; i < totalCategorias; i++) {
+      const catKey = categoriasPorDescargar[i];
+      const conf = CONFIG_CATEGORIAS[catKey];
+      let partIdx = conf.startDigit;
+      let consecutiveErrors = 0;
+      
+      while (consecutiveErrors < 2 && partIdx < 999) {
+        const partStr = String(partIdx).padStart(4, '0');
+        const urlChunk = `json_chunks/${conf.chunkFolder}/${conf.prefix}${partStr}.jsonl`;
+        
+        try {
+          const res = await fetch(urlChunk);
+          if (!res.ok) {
+            consecutiveErrors++;
+            partIdx++;
+            continue;
+          }
+          
+          consecutiveErrors = 0;
+          const text = await res.text();
+          const lines = text.split('\n');
+          
+          lines.forEach(line => {
+            if (!line.trim()) return;
+            try {
+              let obj = JSON.parse(line);
+              obj._categoriaInterna = catKey;
+              chunkCache.push(obj);
+            } catch(e){}
+          });
+          
+          partIdx++;
+          
+          archivosDescargadosContador++;
+          let porcentajeDinamic = Math.min(Math.round((archivosDescargadosContador / (totalCategorias * 70)) * 50), 50);
+          
+          progressBar.style.width = porcentajeDinamic + '%';
+          if (porcentajeDinamic > 0) {
+            progressBar.textContent = porcentajeDinamic + '%';
+          }
+          
+        } catch (err) {
+          consecutiveErrors++;
+          partIdx++;
+        }
+      }
+    }
+    
+    statusDiv.textContent = '¡Descarga completada! Preparando fase de búsqueda...';
+    progressBar.style.width = '50%';
+    progressBar.textContent = '50%';
+  }
 
-function invocarVisorPdf(url, pagina) {
-    const viewer = document.getElementById('pdfViewer');
-    viewer.style.display = 'block';
-    const hash = pagina ? `#page=${pagina}` : '';
-    viewer.src = url.split('#')[0] + hash;
-    viewer.scrollIntoView({ behavior: 'smooth' });
-}
+  async function realizarBusquedaChunks() {
+    const q = busquedaInput.value.trim();
+    if (!q) {
+      alert("Por favor, ingresá un término de búsqueda.");
+      return;
+    }
+
+    const categoriasActivas = [];
+    if(document.getElementById('cat-boletines').checked) categoriasActivas.push('boletines');
+    if(document.getElementById('cat-licitaciones').checked) categoriasActivas.push('licitaciones');
+    if(document.getElementById('cat-hcd-orden').checked) categoriasActivas.push('hcd_orden');
+    if(document.getElementById('cat-hcd-taqui').checked) categoriasActivas.push('hcd_taqui');
+
+    if (categoriasActivas.length === 0) {
+      resultadosDiv.innerHTML = '<p>Seleccioná al menos una categoría.</p>';
+      return;
+    }
+
+    if (!chunkCache || categoriasActivas.some(cat => !chunkCache.some(obj => obj._categoriaInterna === cat))) {
+      await descargarTodoElCacheChunks();
+    } else {
+      progressContainer.style.display = 'block';
+    }
+
+    statusDiv.textContent = 'Fase 2/2: Buscando coincidencias en memoria...';
+    resultadosDiv.innerHTML = '';
+    pdfPreview.innerHTML = '';
+
+    let regex;
+    const mode = document.querySelector('input[name="searchType"]:checked').value;
+    if (mode === 'endsWith') regex = new RegExp(q + '$', 'i');
+    else if (mode === 'or') regex = new RegExp(q.split('|').join('|'), 'i');
+    else regex = new RegExp(q, 'i');
+
+    const desdeString = desdeInput.value ? desdeInput.value.replace(/-/g, '') + '00' : '00000000';
+    const hastaString = hastaInput.value ? hastaInput.value.replace(/-/g, '') + '32' : '99999999';
+
+    let matches = [];
+    
+    const totalChunksAProcesar = chunkCache.length;
+    let indexActual = 0;
+    const TAMANO_LOTE = 2500;
+
+    function procesarLoteAsincrono() {
+      const limiteLote = Math.min(indexActual + TAMANO_LOTE, totalChunksAProcesar);
+      
+      for (let i = indexActual; i < limiteLote; i++) {
+        const obj = chunkCache[i];
+        if (!categoriasActivas.includes(obj._categoriaInterna)) continue;
+        
+        const fecha8 = normalizarFechaChunk(obj);
+        if (fecha8 < desdeString || fecha8 > hastaString) continue;
+
+        let cumple = false;
+        if (obj._categoriaInterna === 'licitaciones') {
+          if (regex.test(obj.fragmento || '') || regex.test(obj.codigo || '') || regex.test(obj.archivo || '')) cumple = true;
+        } else {
+          if (regex.test(obj.fragmento || '')) cumple = true;
+        }
+
+        if (cumple) {
+          matches.push({
+            categoria: obj._categoriaInterna,
+            archivo: obj.archivo || '',
+            url: obj.url || '#',
+            fecha: obj.fecha || obj.fecha_acta || '',
+            pagina: obj.pagina || 1,
+            extra_info: obj.fragmento || '',
+            datosFecha: {
+              sortable: fecha8,
+              display: fecha8 !== '19000101' ? `${fecha8.slice(6,8)}/${fecha8.slice(4,6)}/${fecha8.slice(0,4)}` : 'S/F'
+            }
+          });
+        }
+      }
+
+      indexActual = limiteLote;
+      
+      let avanceBusqueda = totalChunksAProcesar > 0 ? (indexActual / totalChunksAProcesar) * 50 : 50;
+      let porcentajeFinal = Math.round(50 + avanceBusqueda);
+      
+      progressBar.style.width = porcentajeFinal + '%';
+      progressBar.textContent = porcentajeFinal + '%';
+
+      if (indexActual < totalChunksAProcesar) {
+        setTimeout(procesarLoteAsincrono, 1); 
+      } else {
+        statusDiv.textContent = '¡Búsqueda completada!';
+        
+        setTimeout(() => { 
+          progressContainer.style.display = 'none'; 
+          statusDiv.textContent = '';
+        }, 1200);
+
+        matches.sort((a, b) => {
+          const da = a.datosFecha.sortable, db = b.datosFecha.sortable;
+          return ordenSelect.value === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
+        });
+
+        if (!matches.length) {
+          resultadosDiv.innerHTML = '<p>No se encontraron resultados en la búsqueda textual.</p>';
+          contadorDiv.textContent = '0 resultados';
+          return;
+        }
+
+        renderizarResultadosFinales(matches, regex, true);
+      }
+    }
+
+    procesarLoteAsincrono();
+  }
+
+  function renderizarResultadosFinales(matches, regex, esChunk) {
+    contadorDiv.textContent = `${matches.length} resultados encontrados`;
+    
+    const primero = matches[0];
+    cargarPDF(`${primero.url}#page=${primero.pagina || 1}`);
+
+    matches.forEach(m => {
+      const idDoc = esChunk ? m.archivo.replace('.pdf', '') : extraerCodigoLimpio(m);
+      const rawFechaStr = m.fecha ? m.fecha : '';
+      
+      let expDato = '';
+      if (!esChunk && rawFechaStr && !rawFechaStr.match(/^(19[89]\d|20[0123]\d)[-]?([01]\d)[-]?([0-3]\d)$/) && rawFechaStr.includes('-')) {
+        expDato = ` (Exp. ${rawFechaStr})`;
+      }
+
+      const conf = CONFIG_CATEGORIAS[m.categoria] || { label: 'Documento', badgeClass: '', resultClass: '', colorHex: '#666' };
+
+      const div = document.createElement('div');
+      div.className = `resultado ${conf.resultClass}`; 
+      div.innerHTML = `
+        <div class="linea">
+          <span class="badge ${conf.badgeClass}">${conf.label}</span>
+          <a href="${m.url}" target="_blank">${conf.label}: ${idDoc}${expDato} – ${m.datosFecha.display}</a> (pág. ${m.pagina || 1})
+        </div>
+        <div class="fragmento">${(m.extra_info || 'Sin descripción').replace(regex, '<mark>$&</mark>')}</div>
+      `;
+      
+      div.onclick = (e) => { 
+        if(e.target.tagName !== 'A') cargarPDF(`${m.url}#page=${m.pagina || 1}`); 
+      };
+      resultadosDiv.appendChild(div);
+    });
+  }
+
+  function procesarMetadatosYDescargas() {
+    let mapeoDocsUnicos = {};
+    let annosExistentes = new Set();
+
+    baseDocumentosIndexados.forEach(obj => {
+      if (!obj.url) return;
+      if (!mapeoDocsUnicos[obj.url]) {
+        const dF = obj.datosFecha;
+        if (dF.year !== 'N/D') annosExistentes.add(dF.year);
+
+        mapeoDocsUnicos[obj.url] = {
+          url: obj.url,
+          categoriaKey: obj.categoria,
+          anno: dF.year,
+          mes: dF.month,
+          identificador: extraerCodigoLimpio(obj),
+          datosFecha: dF
+        };
+      }
+    });
+
+    documentosUnicosParaDescarga = Object.values(mapeoDocsUnicos);
+    
+    descFiltroAnno.innerHTML = '<option value="TODOS">Todos los años</option>';
+    Array.from(annosExistentes).sort((a, b) => b.localeCompare(a)).forEach(a => {
+      descFiltroAnno.innerHTML += `<option value="${a}">${a}</option>`;
+    });
+
+    const todayYear = new Date().getFullYear().toString();
+    if (annosExistentes.has(todayYear)) {
+      descFiltroAnno.value = todayYear;
+    } else {
+      descFiltroAnno.value = "TODOS";
+    }
+
+    renderizarEnlacesIndice();
+  }
+
+  function renderizarEnlacesIndice() {
+    if (documentosUnicosParaDescarga.length === 0) {
+      descContenedorEnlaces.innerHTML = '<span style="color:#888; font-size:0.85rem;">No hay registros cargados.</span>';
+      return;
+    }
+
+    const boletinesChecked = document.getElementById('cat-boletines').checked;
+    const licitacionesChecked = document.getElementById('cat-licitaciones').checked;
+    const ordenesChecked = document.getElementById('cat-hcd-orden').checked;
+    const taquiChecked = document.getElementById('cat-hcd-taqui').checked;
+
+    const annoFiltro = descFiltroAnno.value;
+    const desagregarM = descDesagregarMensual.checked;
+
+    let filtrados = documentosUnicosParaDescarga.filter(d => {
+      if (d.categoriaKey === 'boletines' && !boletinesChecked) return false;
+      if (d.categoriaKey === 'licitaciones' && !licitacionesChecked) return false;
+      if (d.categoriaKey === 'hcd_orden' && !ordenesChecked) return false;
+      if (d.categoriaKey === 'hcd_taqui' && !taquiChecked) return false;
+      return true;
+    });
+
+    if (annoFiltro !== 'TODOS') filtrados = filtrados.filter(d => d.anno === annoFiltro);
+    filtrados.sort((a, b) => b.datosFecha.sortable.localeCompare(a.datosFecha.sortable));
+
+    descContenedorEnlaces.innerHTML = '';
+    const mesesNombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    if (desagregarM) {
+      let agrupados = {};
+      filtrados.forEach(d => {
+        if (!agrupados[d.anno]) agrupados[d.anno] = {};
+        if (!agrupados[d.anno][d.mes]) agrupados[d.anno][d.mes] = [];
+        agrupados[d.anno][d.mes].push(d);
+      });
+
+      Object.keys(agrupados).sort((a, b) => b.localeCompare(a)).forEach(a => {
+        Object.keys(agrupados[a]).sort((a, b) => b.localeCompare(a)).forEach(m => {
+          const mNombre = mesesNombres[parseInt(m, 10) - 1] || `Mes ${m}`;
+          const bloque = document.createElement('div');
+          bloque.innerHTML = `<div style="font-weight:bold; font-size:0.85rem; color:#2c3e50; border-bottom:1px solid #e2e8f0; margin-top:0.3rem; padding-bottom:1px;">📂 ${mNombre} ${a}</div>`;
+          
+          const wrapper = document.createElement('div');
+          wrapper.style.display = 'flex'; wrapper.style.flexWrap = 'wrap'; wrapper.style.gap = '0.4rem'; wrapper.style.padding = '0.3rem 0';
+          
+          agrupados[a][m].forEach(doc => { wrapper.appendChild(crearElementoLink(doc)); });
+          bloque.appendChild(wrapper);
+          descContenedorEnlaces.appendChild(bloque);
+        });
+      });
+    } else {
+      let agrupadosAnno = {};
+      filtrados.forEach(d => {
+        if (!agrupadosAnno[d.anno]) agrupadosAnno[d.anno] = [];
+        agrupadosAnno[d.anno].push(d);
+      });
+
+      Object.keys(agrupadosAnno).sort((a, b) => b.localeCompare(a)).forEach(a => {
+        const bloque = document.createElement('div');
+        bloque.innerHTML = `<div style="font-weight:bold; font-size:0.85rem; color:#2c3e50; border-bottom:1px solid #e2e8f0; margin-top:0.3rem; padding-bottom:1px;">🗓️ Año ${a}</div>`;
+        
+        const wrapper = document.createElement('div');
+        wrapper.style.display = 'flex'; wrapper.style.flexWrap = 'wrap'; wrapper.style.gap = '0.4rem'; wrapper.style.padding = '0.3rem 0';
+        
+        agrupadosAnno[a].forEach(doc => { wrapper.appendChild(crearElementoLink(doc)); });
+        bloque.appendChild(wrapper);
+        descContenedorEnlaces.appendChild(bloque);
+      });
+    }
+  }
+
+  function crearElementoLink(doc) {
+    const conf = CONFIG_CATEGORIAS[doc.categoriaKey] || { label: 'Doc', colorHex: '#666' };
+    const link = document.createElement('a');
+    link.href = doc.url; 
+    link.target = '_blank';
+    link.style.textDecoration = 'none'; link.style.fontSize = '0.78rem'; link.style.padding = '0.2rem 0.4rem';
+    link.style.borderRadius = '4px'; link.style.color = '#fff'; link.style.fontWeight = 'bold'; link.style.display = 'inline-block';
+    link.style.backgroundColor = conf.colorHex;
+    link.textContent = `${conf.label} N.º ${doc.identificador}`;
+    return link;
+  }
+
+  descFiltroAnno.addEventListener('change', renderizarEnlacesIndice);
+  descDesagregarMensual.addEventListener('change', renderizarEnlacesIndice);
+  document.getElementById('cat-boletines').addEventListener('change', renderizarEnlacesIndice);
+  document.getElementById('cat-licitaciones').addEventListener('change', renderizarEnlacesIndice);
+  document.getElementById('cat-hcd-orden').addEventListener('change', renderizarEnlacesIndice);
+  document.getElementById('cat-hcd-taqui').addEventListener('change', renderizarEnlacesIndice);
+
+  botonBuscarChunks.addEventListener('click', realizarBusquedaChunks);
+  
+  busquedaInput.addEventListener('keydown', e => { 
+    if(e.key === 'Enter') realizarBusquedaChunks();
+  });
+
+  cargarBaseDeDatosCSV();
 </script>
 </body>
 </html>
