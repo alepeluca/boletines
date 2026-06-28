@@ -1,0 +1,13 @@
+{
+  "name": "buscador-boletines",
+  "version": "1.4.1",
+  "description": "Buscador Integrado Municipal",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'Static site - no build needed'"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
