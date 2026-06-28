@@ -1,172 +1,118 @@
-export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+# api/search.py
+from http.server import BaseHTTPRequestHandler
+import json
+import csv
+import os
+import re
+from urllib.parse import urlparse, parse_qs
 
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
-  try {
-    const { q, categories, searchType, desde, hasta, orden } = req.query;
-
-    if (!q) {
-      return res.status(400).json({ error: 'Parámetro q requerido' });
-    }
-
-    // Fetch del índice CSV
-    const csvUrl = 'https://raw.githubusercontent.com/alepeluca/boletines/main/indice_documentos.csv';
-    const csvResponse = await fetch(csvUrl);
-    
-    if (!csvResponse.ok) {
-      return res.status(500).json({ error: 'No se pudo cargar el índice' });
-    }
-
-    const csvText = await csvResponse.text();
-    const docs = parsearCSV(csvText);
-
-    // Parsear categorías
-    const catArray = categories ? categories.split(',').map(c => c.trim()) : ['boletines'];
-    
-    // Compilar regex de búsqueda
-    let regex;
-    if (searchType === 'endsWith') {
-      regex = new RegExp(q + '$', 'i');
-    } else if (searchType === 'or') {
-      const words = q.split('|').map(w => w.trim()).join('|');
-      regex = new RegExp(words, 'i');
-    } else {
-      regex = new RegExp(q, 'i');
-    }
-
-    // Filtrar resultados
-    const results = docs.filter(doc => {
-      // Filtro de categoría
-      if (!catArray.includes(doc.categoria)) return false;
-
-      // Filtro de fecha
-      const fecha8 = normalizarFecha(doc.fecha);
-      if (fecha8 < desde || fecha8 > hasta) return false;
-
-      // Filtro de búsqueda
-      const contenido = (doc.archivo || '') + ' ' + (doc.extra_info || '') + ' ' + (doc.url || '');
-      return regex.test(contenido);
-    });
-
-    // Ordenar
-    results.sort((a, b) => {
-      const fa = normalizarFecha(a.fecha);
-      const fb = normalizarFecha(b.fecha);
-      return orden === 'asc' ? fa.localeCompare(fb) : fb.localeCompare(fa);
-    });
-
-    // Limitar a 100 resultados
-    const limited = results.slice(0, 100);
-
-    // Formatear respuesta
-    const formatted = limited.map(doc => ({
-      categoria: doc.categoria,
-      archivo: doc.archivo || '',
-      url: doc.url || '#',
-      fecha: doc.fecha || '',
-      pagina: doc.pagina || 1,
-      fragmento: doc.extra_info || '',
-      datosFecha: {
-        sortable: normalizarFecha(doc.fecha),
-        display: formatearFecha(doc.fecha)
-      }
-    }));
-
-    res.status(200).json(formatted);
-
-  } catch (error) {
-    console.error('Error en búsqueda:', error);
-    res.status(500).json({ error: error.message });
-  }
-}
-
-function parsearCSV(text) {
-  const lines = text.split(/\r?\n/);
-  if (lines.length === 0) return [];
-  
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
-  const rows = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    let arr = [];
-    let insideQuote = false;
-    let entry = '';
-
-    for (let j = 0; j < line.length; j++) {
-      const char = line[j];
-      if (char === '"') insideQuote = !insideQuote;
-      else if (char === ',' && !insideQuote) {
-        arr.push(entry.trim());
-        entry = '';
-      } else {
-        entry += char;
-      }
-    }
-    arr.push(entry.trim());
-
-    if (arr.length >= headers.length) {
-      let obj = {};
-      headers.forEach((h, index) => {
-        obj[h] = arr[index] ? arr[index].replace(/^"|"$/g, '') : '';
-      });
-
-      obj.categoria = obj.categoria || arr[0] || '';
-      let catLow = obj.categoria.toLowerCase();
-      if (catLow.includes('bolet')) obj.categoria = 'boletines';
-      else if (catLow.includes('lici')) obj.categoria = 'licitaciones';
-      else if (catLow.includes('orden')) obj.categoria = 'hcd_orden';
-      else if (catLow.includes('taqui')) obj.categoria = 'hcd_taqui';
-
-      obj.archivo = obj.archivo || arr[1];
-      obj.url = obj.url || arr[2];
-      obj.fecha = obj.fecha || arr[3];
-      obj.extra_info = obj.extra_info || arr[4];
-      obj.pagina = obj.pagina || arr[5] || '1';
-
-      rows.push(obj);
-    }
-  }
-  return rows;
-}
-
-function normalizarFecha(fecha) {
-  if (!fecha) return '19000101';
-  
-  const cleaned = fecha.replace(/[^\d-]/g, '');
-  const match = cleaned.match(/^(19[89]\d|20[0123]\d)[-]?([01]\d)[-]?([0-3]\d)$/);
-  
-  if (match) {
-    return match[1] + match[2] + match[3];
-  }
-  
-  const yearMatch = fecha.match(/\b(19[89]\d|20[0123]\d)\b/);
-  if (yearMatch) {
-    return yearMatch[1] + '0101';
-  }
-  
-  return '19000101';
-}
-
-function formatearFecha(fecha) {
-  const norm = normalizarFecha(fecha);
-  
-  if (norm === '19000101') return 'S/F';
-  if (norm.length !== 8) return norm;
-  
-  const year = norm.slice(0, 4);
-  const month = norm.slice(4, 6);
-  const day = norm.slice(6, 8);
-  
-  return `${day}/${month}/${year}`;
-}
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        # 1. Parsear parámetros de consulta enviados por la UI
+        parsed_url = urlparse(self.path)
+        query_params = parse_qs(parsed_url.query)
+        
+        query_term = query_params.get("q", [""])[0].strip()
+        categories_str = query_params.get("categories", [""])[0]
+        search_type = query_params.get("searchType", ["contains"])[0]
+        desde_val = query_params.get("desde", ["00000000"])[0]  # Formato YYYYMMDD o aproximado
+        hasta_val = query_params.get("hasta", ["99999999"])[0]
+        orden = query_params.get("orden", ["desc"])[0]
+        
+        active_categories = [c.strip() for c in categories_str.split(",") if c.strip()]
+        
+        resultados = []
+        
+        # 2. Localizar y parsear el archivo indice_documentos.csv en la raíz del deploy
+        # Vercel clona el repositorio, por lo que el CSV está accesible de forma relativa
+        csv_path = os.path.join(os.getcwd(), "indice_documentos.csv")
+        
+        if os.path.exists(csv_path):
+            with open(csv_path, mode="r", encoding="utf-8") as f:
+                # El parser de Python maneja de forma nativa los fragmentos que contienen comillas y comas
+                reader = csv.DictReader(f)
+                
+                for row in reader:
+                    # Filtro de Categoría
+                    cat = row.get("categoria", "").lower()
+                    # Mapeos por si el script difiere sutilmente en los nombres
+                    if "bolet" in cat: cat_key = "boletines"
+                    elif "lici" in cat: cat_key = "licitaciones"
+                    elif "orden" in cat: cat_key = "hcd_orden"
+                    elif "taqui" in cat: cat_key = "hcd_taqui"
+                    else: cat_key = cat
+                    
+                    if active_categories and (cat_key not in active_categories):
+                        continue
+                    
+                    # Normalización y extracción de la fecha para el ordenamiento dinámico
+                    raw_fecha = row.get("fecha", "").replace("-", "")
+                    match_std = re.search(r'\b(19[89]\d|20[0123]\d)([01]\d)([0-3]\d)\b', raw_fecha)
+                    
+                    if match_std:
+                        sortable_date = match_std.group(1) + match_std.group(2) + match_std.group(3)
+                        display_date = f"{match_std.group(3)}/{match_std.group(2)}/{match_std.group(1)}"
+                    else:
+                        # Fallback si no tiene fecha exacta pero contiene un año en el archivo/texto
+                        match_year = re.search(r'\b(19[89]\d|20[0123]\d)\b', row.get("archivo", "") + " " + row.get("extra_info", ""))
+                        if match_year:
+                            sortable_date = match_year.group(1) + "0101"
+                            display_date = f"Año {match_year.group(1)}"
+                        else:
+                            sortable_date = "19000101"
+                            display_date = "S/F"
+                    
+                    # Filtro de Rango de Fechas
+                    # Ajustamos los parámetros desde/hasta para hacer comparación de strings limpia de 8 dígitos
+                    cmp_desde = desde_val[:8].ljust(8, "0")
+                    cmp_hasta = hasta_val[:8].ljust(8, "9")
+                    if not (cmp_desde <= sortable_date <= cmp_hasta):
+                        continue
+                    
+                    # Campo de texto objetivo para la búsqueda textual profunda
+                    fragmento = row.get("fragmento", "")
+                    extra_info = row.get("extra_info", "")
+                    target_text = (fragmento + " " + extra_info + " " + row.get("archivo", "")).lower()
+                    term_lower = query_term.lower()
+                    
+                    # Filtro del Tipo de Búsqueda Textual
+                    match_found = False
+                    if not query_term:
+                        match_found = True
+                    elif search_type == "contains" and term_lower in target_text:
+                        match_found = True
+                    elif search_type == "endsWith" and target_text.endswith(term_lower):
+                        match_found = True
+                    elif search_type == "or":
+                        words = [w.strip().lower() for w in query_term.split("|") if w.strip()]
+                        if any(w in target_text for w in words):
+                            match_found = True
+                            
+                    if match_found:
+                        # Estructurar respuesta compatible con el renderizador del Front-End
+                        resultados.append({
+                            "categoria": cat_key,
+                            "archivo": row.get("archivo", ""),
+                            "url": row.get("url", ""),
+                            "fecha": row.get("fecha", ""),
+                            "fragmento": fragmento if fragmento else extra_info,
+                            "pagina": row.get("pagina", "1"),
+                            "datosFecha": {
+                                "sortable": sortable_date,
+                                "display": display_date
+                            }
+                        })
+            
+            # 3. Ordenamiento cronológico dinámico solicitado por el selector
+            is_descending = (orden == "desc")
+            resultados.sort(key=lambda x: x["datosFecha"]["sortable"], reverse=is_descending)
+            
+        # 4. Responder la petición HTTP en formato JSON
+        self.send_response(200)
+        self.send_header("Content-type", "application/json")
+        # Habilitar CORS para pruebas locales cruzadas
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        
+        self.wfile.write(json.dumps(resultados).encode("utf-8"))
+        return
