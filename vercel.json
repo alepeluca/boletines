@@ -3,7 +3,6 @@
   "devCommand": "vercel dev",
   "installCommand": "npm install",
   "framework": "vanilla",
-  "public": ".",
   "functions": {
     "api/**/*.js": {
       "memory": 1024,
