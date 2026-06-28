@@ -54,7 +54,7 @@
       <span id="descCargandoStatus" style="font-size:0.85rem; color:#666; font-style:italic;">Leyendo índice unificado…</span>
     </div>
     
-    <div id="descContenedorEnlaces" style="max-height: 200px; overflow-y: auto; padding: 0.5rem; border: 1px dashed #ccc; border-radius: 4px; background: #fafafa; display: flex; flex-direction: column; gap: 0.6rem;">
+    <div id="descContenedorEnlaces" style="max-height: 200px; overflow-y: auto; padding: 0.5rem; border: 1px dashed #ccc; border-radius: 4px; background: #fafafa; display: flex; flex-direction: column">
       <span style="color:#888; font-size:0.85rem; font-style:italic; text-align:center;">Construyendo grilla de descargas…</span>
     </div>
   </div>
@@ -89,14 +89,15 @@
   </div>
 
   <div id="progressContainer" style="width: 100%; max-width: 900px; background: #e2e8f0; border-radius: 20px; height: 24px; position: relative; overflow: hidden; margin: 1rem 0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); display: none;">
-    <div id="progressBar" style="width: 0%; height: 100%; background: #3b82f6; transition: width 0.2s ease; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.9rem;"></div>
+    <div id="progressBar" style="width: 0%; height: 100%; background: #3b82f6; transition: width 0.2s ease; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.8rem;">
+    </div>
   </div>
 
   <div id="status"></div>
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V1.3.2 Asíncrona Fix Total</div>
+  <div id="version">V1.4.0 API Server-Side Search</div>
 
 <script>
   const ultimaDiv = document.getElementById('ultimaActualizacion');
@@ -121,8 +122,6 @@
 
   let baseDocumentosIndexados = []; 
   let documentosUnicosParaDescarga = [];
-  
-  let chunkCache = null;
 
   const CONFIG_CATEGORIAS = {
     boletines: { label: 'Boletín', badgeClass: 'badge-boletin', resultClass: '', colorHex: '#0000ff', chunkFolder: 'bolet', prefix: 'bolet_part_', startDigit: 1 },
@@ -205,17 +204,6 @@
     return { sortable: "19000101", display: "S/F", year: "N/D", month: "01" };
   }
 
-  function normalizarFechaChunk(obj) {
-    if (obj.fecha) return obj.fecha.replace(/[^\d]/g, '').slice(0, 8);
-    if (obj.fecha_acta) return obj.fecha_acta.replace(/[^\d]/g, '').slice(0, 8);
-    
-    let nombre = obj.archivo || '';
-    let match = nombre.match(/^(\d{8})/);
-    if (match) return match[1];
-    
-    return "19000101";
-  }
-
   function extraerCodigoLimpio(obj) {
     if (obj.categoria === 'boletines') {
       const m = (obj.url || obj.archivo || '').match(/boletin[-_](\d+)/i);
@@ -279,8 +267,7 @@
   }
 
   function mostrarUltimaActualizacion() {
-    ultimaDiv.innerHTML = '<div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.8rem; font-size:0.9rem; background:#fff; padding:0.8rem; border-radius:6px; border:1px solid #ccc; justify-content:center;">' +
-                          '<span style="font-weight:bold; margin-right: 0.2rem;">Actualizado hasta:</span></div>';
+    ultimaDiv.innerHTML = '<div style="display:flex; align-items:center; flex-wrap:wrap; gap:0.8rem; font-size:0.9rem; background:#fff; padding:0.8rem; border-radius:6px; border:1px solid #ccc; justify-content:center;"><span style="font-weight:bold; margin-right: 0.2rem;">Actualizado hasta:</span></div>';
     const container = ultimaDiv.firstChild;
 
     Object.keys(CONFIG_CATEGORIAS).forEach(key => {
@@ -292,7 +279,6 @@
             return;
         }
 
-        // Ordenamos estrictamente de forma cronológica descendente usando sortable
         subGrupo.sort((a, b) => b.datosFecha.sortable.localeCompare(a.datosFecha.sortable));
 
         const ultimo = subGrupo[0];
@@ -318,87 +304,7 @@
     pdfPreview.appendChild(iframe);
   }
 
-  async function descargarTodoElCacheChunks() {
-    if (!chunkCache) {
-      chunkCache = [];
-    }
-    
-    const categoriasActivas = [];
-    if(document.getElementById('cat-boletines').checked) categoriasActivas.push('boletines');
-    if(document.getElementById('cat-licitaciones').checked) categoriasActivas.push('licitaciones');
-    if(document.getElementById('cat-hcd-orden').checked) categoriasActivas.push('hcd_orden');
-    if(document.getElementById('cat-hcd-taqui').checked) categoriasActivas.push('hcd_taqui');
-
-    const categoriasPorDescargar = categoriasActivas.filter(cat => {
-      return !chunkCache.some(obj => obj._categoriaInterna === cat);
-    });
-
-    if (categoriasPorDescargar.length === 0) {
-      return;
-    }
-
-    statusDiv.textContent = 'Fase 1/2: Descargando índices de texto profundo...';
-    progressContainer.style.display = 'block';
-    progressBar.style.width = '0%';
-    progressBar.textContent = '0%';
-    
-    let totalCategorias = categoriasPorDescargar.length;
-    let archivosDescargadosContador = 0;
-    
-    for (let i = 0; i < totalCategorias; i++) {
-      const catKey = categoriasPorDescargar[i];
-      const conf = CONFIG_CATEGORIAS[catKey];
-      let partIdx = conf.startDigit;
-      let consecutiveErrors = 0;
-      
-      while (consecutiveErrors < 2 && partIdx < 999) {
-        const partStr = String(partIdx).padStart(4, '0');
-        const urlChunk = `json_chunks/${conf.chunkFolder}/${conf.prefix}${partStr}.jsonl`;
-        
-        try {
-          const res = await fetch(urlChunk);
-          if (!res.ok) {
-            consecutiveErrors++;
-            partIdx++;
-            continue;
-          }
-          
-          consecutiveErrors = 0;
-          const text = await res.text();
-          const lines = text.split('\n');
-          
-          lines.forEach(line => {
-            if (!line.trim()) return;
-            try {
-              let obj = JSON.parse(line);
-              obj._categoriaInterna = catKey;
-              chunkCache.push(obj);
-            } catch(e){}
-          });
-          
-          partIdx++;
-          
-          archivosDescargadosContador++;
-          let porcentajeDinamic = Math.min(Math.round((archivosDescargadosContador / (totalCategorias * 70)) * 50), 50);
-          
-          progressBar.style.width = porcentajeDinamic + '%';
-          if (porcentajeDinamic > 0) {
-            progressBar.textContent = porcentajeDinamic + '%';
-          }
-          
-        } catch (err) {
-          consecutiveErrors++;
-          partIdx++;
-        }
-      }
-    }
-    
-    statusDiv.textContent = '¡Descarga completada! Preparando fase de búsqueda...';
-    progressBar.style.width = '50%';
-    progressBar.textContent = '50%';
-  }
-
-  async function realizarBusquedaChunks() {
+  async function realizarBusquedaAPI() {
     const q = busquedaInput.value.trim();
     if (!q) {
       alert("Por favor, ingresá un término de búsqueda.");
@@ -416,113 +322,79 @@
       return;
     }
 
-    if (!chunkCache || categoriasActivas.some(cat => !chunkCache.some(obj => obj._categoriaInterna === cat))) {
-      await descargarTodoElCacheChunks();
-    } else {
-      progressContainer.style.display = 'block';
-    }
-
-    statusDiv.textContent = 'Fase 2/2: Buscando coincidencias en memoria...';
-    resultadosDiv.innerHTML = '';
-    pdfPreview.innerHTML = '';
-
-    let regex;
     const mode = document.querySelector('input[name="searchType"]:checked').value;
-    if (mode === 'endsWith') regex = new RegExp(q + '$', 'i');
-    else if (mode === 'or') regex = new RegExp(q.split('|').join('|'), 'i');
-    else regex = new RegExp(q, 'i');
-
     const desdeString = desdeInput.value ? desdeInput.value.replace(/-/g, '') + '00' : '00000000';
     const hastaString = hastaInput.value ? hastaInput.value.replace(/-/g, '') + '32' : '99999999';
 
-    let matches = [];
-    
-    const totalChunksAProcesar = chunkCache.length;
-    let indexActual = 0;
-    const TAMANO_LOTE = 2500;
+    statusDiv.textContent = 'Buscando en servidor...';
+    resultadosDiv.innerHTML = '';
+    pdfPreview.innerHTML = '';
+    progressContainer.style.display = 'block';
+    progressBar.style.width = '25%';
+    progressBar.textContent = '25%';
 
-    function procesarLoteAsincrono() {
-      const limiteLote = Math.min(indexActual + TAMANO_LOTE, totalChunksAProcesar);
+    try {
+      const params = new URLSearchParams({
+        q: q,
+        categories: categoriasActivas.join(','),
+        searchType: mode,
+        desde: desdeString,
+        hasta: hastaString,
+        orden: ordenSelect.value
+      });
+
+      const response = await fetch(`/api/search?${params}`);
       
-      for (let i = indexActual; i < limiteLote; i++) {
-        const obj = chunkCache[i];
-        if (!categoriasActivas.includes(obj._categoriaInterna)) continue;
-        
-        const fecha8 = normalizarFechaChunk(obj);
-        if (fecha8 < desdeString || fecha8 > hastaString) continue;
-
-        let cumple = false;
-        if (obj._categoriaInterna === 'licitaciones') {
-          if (regex.test(obj.fragmento || '') || regex.test(obj.codigo || '') || regex.test(obj.archivo || '')) cumple = true;
-        } else {
-          if (regex.test(obj.fragmento || '')) cumple = true;
-        }
-
-        if (cumple) {
-          matches.push({
-            categoria: obj._categoriaInterna,
-            archivo: obj.archivo || '',
-            url: obj.url || '#',
-            fecha: obj.fecha || obj.fecha_acta || '',
-            pagina: obj.pagina || 1,
-            extra_info: obj.fragmento || '',
-            datosFecha: {
-              sortable: fecha8,
-              display: fecha8 !== '19000101' ? `${fecha8.slice(6,8)}/${fecha8.slice(4,6)}/${fecha8.slice(0,4)}` : 'S/F'
-            }
-          });
-        }
+      if (!response.ok) {
+        throw new Error(`Error del servidor: ${response.status}`);
       }
 
-      indexActual = limiteLote;
-      
-      let avanceBusqueda = totalChunksAProcesar > 0 ? (indexActual / totalChunksAProcesar) * 50 : 50;
-      let porcentajeFinal = Math.round(50 + avanceBusqueda);
-      
-      progressBar.style.width = porcentajeFinal + '%';
-      progressBar.textContent = porcentajeFinal + '%';
+      progressBar.style.width = '75%';
+      progressBar.textContent = '75%';
 
-      if (indexActual < totalChunksAProcesar) {
-        setTimeout(procesarLoteAsincrono, 1); 
-      } else {
+      const results = await response.json();
+      
+      progressBar.style.width = '100%';
+      progressBar.textContent = '100%';
+
+      setTimeout(() => { 
+        progressContainer.style.display = 'none'; 
         statusDiv.textContent = '¡Búsqueda completada!';
-        
-        setTimeout(() => { 
-          progressContainer.style.display = 'none'; 
-          statusDiv.textContent = '';
-        }, 1200);
+      }, 500);
 
-        matches.sort((a, b) => {
-          const da = a.datosFecha.sortable, db = b.datosFecha.sortable;
-          return ordenSelect.value === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
-        });
-
-        if (!matches.length) {
-          resultadosDiv.innerHTML = '<p>No se encontraron resultados en la búsqueda textual.</p>';
-          contadorDiv.textContent = '0 resultados';
-          return;
-        }
-
-        renderizarResultadosFinales(matches, regex, true);
+      if (!results || results.length === 0) {
+        resultadosDiv.innerHTML = '<p>No se encontraron resultados.</p>';
+        contadorDiv.textContent = '0 resultados';
+        return;
       }
-    }
 
-    procesarLoteAsincrono();
+      renderizarResultados(results, q, mode);
+    } catch (err) {
+      console.error('Error en búsqueda:', err);
+      statusDiv.textContent = '❌ Error en la búsqueda';
+      progressContainer.style.display = 'none';
+      resultadosDiv.innerHTML = `<p>Error: ${err.message}</p>`;
+    }
   }
 
-  function renderizarResultadosFinales(matches, regex, esChunk) {
+  function renderizarResultados(matches, queryTerm, mode) {
     contadorDiv.textContent = `${matches.length} resultados encontrados`;
     
-    const primero = matches[0];
-    cargarPDF(`${primero.url}#page=${primero.pagina || 1}`);
+    if (matches.length > 0) {
+      const primero = matches[0];
+      cargarPDF(`${primero.url}#page=${primero.pagina || 1}`);
+    }
+
+    let regex;
+    if (mode === 'endsWith') regex = new RegExp(queryTerm + '$', 'i');
+    else if (mode === 'or') regex = new RegExp(queryTerm.split('|').join('|'), 'i');
+    else regex = new RegExp(queryTerm, 'i');
 
     matches.forEach(m => {
-      const idDoc = esChunk ? m.archivo.replace('.pdf', '') : extraerCodigoLimpio(m);
-      const rawFechaStr = m.fecha ? m.fecha : '';
-      
+      const idDoc = m.archivo.replace('.pdf', '');
       let expDato = '';
-      if (!esChunk && rawFechaStr && !rawFechaStr.match(/^(19[89]\d|20[0123]\d)[-]?([01]\d)[-]?([0-3]\d)$/) && rawFechaStr.includes('-')) {
-        expDato = ` (Exp. ${rawFechaStr})`;
+      if (m.fecha && !m.fecha.match(/^(19[89]\d|20[0123]\d)[-]?([01]\d)[-]?([0-3]\d)$/) && m.fecha.includes('-')) {
+        expDato = ` (Exp. ${m.fecha})`;
       }
 
       const conf = CONFIG_CATEGORIAS[m.categoria] || { label: 'Documento', badgeClass: '', resultClass: '', colorHex: '#666' };
@@ -534,7 +406,7 @@
           <span class="badge ${conf.badgeClass}">${conf.label}</span>
           <a href="${m.url}" target="_blank">${conf.label}: ${idDoc}${expDato} – ${m.datosFecha.display}</a> (pág. ${m.pagina || 1})
         </div>
-        <div class="fragmento">${(m.extra_info || 'Sin descripción').replace(regex, '<mark>$&</mark>')}</div>
+        <div class="fragmento">${(m.fragmento || 'Sin descripción').replace(regex, '<mark>$&</mark>')}</div>
       `;
       
       div.onclick = (e) => { 
@@ -672,10 +544,10 @@
   document.getElementById('cat-hcd-orden').addEventListener('change', renderizarEnlacesIndice);
   document.getElementById('cat-hcd-taqui').addEventListener('change', renderizarEnlacesIndice);
 
-  botonBuscarChunks.addEventListener('click', realizarBusquedaChunks);
+  botonBuscarChunks.addEventListener('click', realizarBusquedaAPI);
   
   busquedaInput.addEventListener('keydown', e => { 
-    if(e.key === 'Enter') realizarBusquedaChunks();
+    if(e.key === 'Enter') realizarBusquedaAPI();
   });
 
   cargarBaseDeDatosCSV();
