@@ -8,6 +8,14 @@
     {
       "src": "index.html",
       "use": "@vercel/static"
+    },
+    {
+      "src": "indice_documentos.csv",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "json_chunks/**/*",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
