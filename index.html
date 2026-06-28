@@ -97,7 +97,7 @@
   <div id="contador"></div>
   <div id="resultados"></div>
   <div id="pdfPreview"></div>
-  <div id="version">V1.4.0 API Server-Side Search</div>
+  <div id="version">V1.4.1 API Server-Side Search + Vercel</div>
 
 <script>
   const ultimaDiv = document.getElementById('ultimaActualizacion');
@@ -122,6 +122,11 @@
 
   let baseDocumentosIndexados = []; 
   let documentosUnicosParaDescarga = [];
+
+  // Detectar si estamos en desarrollo o producción
+  const API_BASE = window.location.hostname === 'localhost' 
+    ? 'http://localhost:3000'
+    : '';
 
   const CONFIG_CATEGORIAS = {
     boletines: { label: 'Boletín', badgeClass: 'badge-boletin', resultClass: '', colorHex: '#0000ff', chunkFolder: 'bolet', prefix: 'bolet_part_', startDigit: 1 },
@@ -343,10 +348,13 @@
         orden: ordenSelect.value
       });
 
-      const response = await fetch(`/api/search?${params}`);
+      const apiUrl = `${API_BASE}/api/search?${params}`;
+      console.log('Llamando a:', apiUrl);
+      
+      const response = await fetch(apiUrl);
       
       if (!response.ok) {
-        throw new Error(`Error del servidor: ${response.status}`);
+        throw new Error(`Error del servidor: ${response.status} ${response.statusText}`);
       }
 
       progressBar.style.width = '75%';
