@@ -1,4 +1,4 @@
-# api/search.py
+# api/index.py
 from http.server import BaseHTTPRequestHandler
 import json
 import os
@@ -7,7 +7,7 @@ from urllib.parse import urlparse, parse_qs
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        # 1. Capturar parámetros de la UI
+        # 1. Capturar parámetros de la UI enviados por el Front-End
         parsed_url = urlparse(self.path)
         query_params = parse_qs(parsed_url.query)
         
@@ -21,7 +21,7 @@ class handler(BaseHTTPRequestHandler):
         active_categories = [c.strip() for c in categories_str.split(",") if c.strip()]
         resultados = []
 
-        # Configuración de carpetas físicas de chunks en el repositorio
+        # Configuración de carpetas donde están tus chunks en el repositorio
         CONFIG_FOLDERS = {
             "boletines": "json_chunks/bolet",
             "licitaciones": "json_chunks/lici",
@@ -29,16 +29,15 @@ class handler(BaseHTTPRequestHandler):
             "hcd_taqui": "json_chunks/taqui"
         }
 
-        # Auxiliar para normalizar y extraer fechas válidas
+        # Auxiliar interno para normalizar y extraer fechas válidas de los chunks
         def extraer_sortable_date(item, cat):
             archivo = item.get("archivo", "")
-            # Si el item ya trae campo fecha
             if "fecha" in item and item["fecha"]:
                 raw = item["fecha"].replace("-", "")
                 m = re.search(r'\b(19[89]\d|20[0123]\d)([01]\d)([0-3]\d)\b', raw)
-                if m: return m.group(1) + m.group(2) + m.group(3), f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
+                if m: 
+                    return m.group(1) + m.group(2) + m.group(3), f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
             
-            # Fallback por nombre de archivo (Boletines: YYYYMMDD...)
             m_year = re.search(r'\b(19[89]\d|20[0123]\d)\b', archivo)
             if m_year:
                 if cat == "boletines" and len(archivo) >= 8 and archivo[:8].isdigit():
@@ -47,7 +46,7 @@ class handler(BaseHTTPRequestHandler):
             
             return "19000101", "S/F"
 
-        # 2. Iterar sobre las carpetas de las categorías seleccionadas
+        # 2. Escaneo profundo de los archivos JSONL (Chunks)
         for cat_key in active_categories:
             folder_relative = CONFIG_FOLDERS.get(cat_key)
             if not folder_relative:
@@ -57,14 +56,12 @@ class handler(BaseHTTPRequestHandler):
             if not os.path.exists(folder_path):
                 continue
 
-            # Escanear todos los archivos .jsonl en la carpeta de la categoría
             for file_name in sorted(os.listdir(folder_path)):
                 if not file_name.endswith(".jsonl"):
                     continue
                     
                 file_path = os.path.join(folder_path, file_name)
                 
-                # Leer renglón por renglón el chunk
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                     for line in f:
                         line = line.strip()
@@ -73,13 +70,12 @@ class handler(BaseHTTPRequestHandler):
                         try:
                             item = json.loads(line)
                             
-                            # Extraer campos de texto a buscar
                             fragmento = item.get("fragmento", "")
                             objeto = item.get("objeto", item.get("extra_info", ""))
                             archivo_text = item.get("archivo", "")
                             target_text = f"{fragmento} {objeto} {archivo_text}".lower()
                             
-                            # Filtro de búsqueda por texto
+                            # Filtros avanzados de texto
                             match_found = False
                             if not query_term:
                                 match_found = True
@@ -90,18 +86,16 @@ class handler(BaseHTTPRequestHandler):
                             elif search_type == "or":
                                 words = [w.strip() for w in query_term.split("|") if w.strip()]
                                 if any(w in target_text for w in words):
-                                    # Asegurarse de compilar las palabras en un regex seguro
                                     match_found = True
 
                             if not match_found:
                                 continue
 
-                            # Filtro de Rangos de Fechas usando chunks
+                            # Filtro de rango de fechas
                             sortable_date, display_date = extraer_sortable_date(item, cat_key)
                             if not (desde_val <= sortable_date <= hasta_val):
                                 continue
 
-                            # Estructurar resultado unificado para la interfaz
                             resultados.append({
                                 "categoria": cat_key,
                                 "archivo": archivo_text,
@@ -115,12 +109,12 @@ class handler(BaseHTTPRequestHandler):
                                 }
                             })
                         except Exception:
-                            continue # Ignorar líneas corruptas del JSONL
+                            continue
 
-        # 3. Ordenar dinámicamente los aciertos de los chunks
+        # 3. Aplicar ordenamiento solicitado por la UI
         resultados.sort(key=lambda x: x["datosFecha"]["sortable"], reverse=(orden == "desc"))
 
-        # 4. Enviar JSON al Front
+        # 4. Responder la solicitud HTTP en formato JSON válido para Vercel
         self.send_response(200)
         self.send_header("Content-type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
